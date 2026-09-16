@@ -1,0 +1,850 @@
+#!/usr/bin/env python3
+"""одна задача: положить текст файла на страницу как есть + кнопка копирования,
+переключатель светлой/тёмной темы, размер шрифта, правка текста, сохранение
+правок (Ctrl+S), счётчик строк и нумерация строк.
+запуск: python3 gen.py [вход.txt] [выход.html]; по умолчанию ../11.txt -> ./index.html
+index.html рабочий и сам по себе (file://), и под serve.py: вшитый текст виден
+всегда, пока сервер не отдал список файлов и не открыт другой файл. без сети,
+внешних скриптов, шрифтов и иконок: глифы вшиты инлайн-спрайтом
+(Rune Icons, github.com/Nexvyn/runeicons, Apache-2.0, стиль normal)."""
+import json
+import pathlib
+import sys
+
+HERE = pathlib.Path(__file__).resolve().parent
+SRC = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else HERE.parent / '11.txt'
+DST = pathlib.Path(sys.argv[2]) if len(sys.argv) > 2 else HERE / 'index.html'
+
+TPL = r'''<!doctype html>
+<html lang="ru" class="light">
+<meta charset="utf-8">
+<script>
+try {
+  if(JSON.parse(localStorage.getItem('txtviewer') || '{}').theme === 'dark') {
+    document.documentElement.classList.remove('light');
+  }
+} catch(e) {}
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__NAME__</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%232b2f33'/%3E%3Cg%20transform='translate(4%204)'%20fill='none'%20stroke='%23ffd43b'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cg%20fill='none'%3E%3Cpath%20d='M14%202H6C5.46957%202%204.96086%202.21072%204.58579%202.58579C4.21071%202.96086%204%203.46957%204%204V20C4%2020.5304%204.21071%2021.0391%204.58579%2021.4142C4.96086%2021.7893%205.46957%2022%206%2022H18C18.5304%2022%2019.0391%2021.7893%2019.4142%2021.4142C19.7893%2021.0391%2020%2020.5304%2020%2020V8M14%202C14.3166%201.99949%2014.6301%202.06161%2014.9225%202.18277C15.215%202.30394%2015.4806%202.48176%2015.704%202.706L19.292%206.294C19.5168%206.51751%2019.6952%206.78335%2019.8167%207.07616C19.9382%207.36898%2020.0005%207.68297%2020%208M14%202V7C14%207.26522%2014.1054%207.51957%2014.2929%207.70711C14.4804%207.89464%2014.7348%208%2015%208L20%208M10%209H8M16%2013H8M16%2017H8'%20stroke='%23ffd43b'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#1c2024; --panel:#242930; --fg:#e3e7ec; --dim:#8e98a3; --line:#343a42;
+  --btn:#2a3038; --btnfg:#e3e7ec; --acc:#ffd43b;
+  --tok-kw:#c792ea; --tok-str:#95d18f; --tok-com:#6b7683; --tok-num:#ffb86c; --tok-fn:#82aaff; --tok-type:#7fd1e0; --sel:rgba(255,212,59,.30); --sel:rgba(255,212,59,.26);
+  --gut:calc(4ch + 1.7rem);
+  color-scheme:dark;
+  scrollbar-color:#454d57 transparent;
+}
+html.light{
+  --bg:#ffffff; --panel:#ffffff; --fg:#20252b; --dim:#6a737d; --line:#e4e6e3;
+  --btn:#ffffff; --btnfg:#333a42; --acc:#9a6b00;
+  --tok-kw:#7c3aed; --tok-str:#116329; --tok-com:#8a929b; --tok-num:#b45309; --tok-fn:#0b62a4; --tok-type:#0f766e; --sel:rgba(154,107,0,.22); --sel:rgba(154,107,0,.18);
+  color-scheme:light;
+  scrollbar-color:#d7d9d6 transparent;
+}
+*{box-sizing:border-box}
+html{font-size:13px;height:100%}
+body{height:100%;margin:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);color:var(--fg);font:1rem/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding:10px clamp(16px,4vw,38px);background:var(--panel);border-bottom:1px solid var(--line);font-size:13px}
+.bar b{display:inline-flex;align-items:center;gap:7px;font-weight:600}
+.bar b .ic{color:var(--dim)}
+.ctl{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{display:inline-flex;align-items:center;gap:.45em;background:var(--btn);border:1px solid var(--line);border-radius:7px;color:var(--btnfg);padding:6px 11px;font:inherit;font-size:12.8px;cursor:pointer}
+button:hover{border-color:var(--acc);color:var(--acc)}
+button:active{transform:translateY(1px)}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+button:disabled{opacity:.45;cursor:default}
+button:disabled:hover{border-color:var(--line);color:var(--btnfg)}
+#save.dirty,#cp.ok,.on{border-color:var(--acc);color:var(--acc)}
+.ic{width:1.05em;height:1.05em;display:block;flex:none}
+#fsval{min-width:48px;text-align:center;color:var(--dim)}
+.seg{display:inline-flex;align-items:stretch;background:var(--btn);border:1px solid var(--line);border-radius:7px}
+.seg button{border:0;border-radius:0;background:transparent;padding:6px 11px}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button:active{transform:none}
+.seg button:focus-visible{outline-offset:-2px}
+#reset:disabled{opacity:1;cursor:default}
+#reset:hover:not(:disabled) #fsval{color:var(--acc)}
+.sep{flex:none;width:1px;height:14px;background:var(--line)}
+main{flex:1;display:flex;width:100%;padding:1.2rem clamp(1rem,4vw,2.6rem) 1.4rem;min-height:0}
+.editor{flex:1;display:flex;min-height:0;position:relative;overflow:hidden}
+.editor::before{content:'';position:absolute;left:var(--gut);top:0;bottom:0;width:1px;background:var(--line);z-index:2;pointer-events:none}
+#back{position:absolute;left:0;top:0;overflow:hidden;pointer-events:none;user-select:none;color:var(--fg);white-space:pre-wrap;overflow-wrap:break-word;counter-reset:line;will-change:transform;z-index:0}
+#back .ln{position:relative;padding-left:calc(var(--gut) + .9rem);counter-increment:line;min-height:1.6em}
+#back .ln::before{content:counter(line);position:absolute;left:0;width:calc(var(--gut) - 1.7rem);text-align:right;color:var(--dim);font-size:.8rem}
+textarea{flex:1;width:100%;min-height:0;background:transparent;border:0;padding:0 0 0 calc(var(--gut) + .9rem);outline:none;resize:none;color:transparent;caret-color:var(--fg);font:inherit;white-space:pre-wrap;overflow-wrap:break-word;position:relative;z-index:1;overflow:auto}
+textarea::-webkit-scrollbar{width:.55rem;height:.55rem}
+textarea::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+.stat{display:flex;gap:19px;padding:8px clamp(16px,4vw,38px);background:var(--panel);border-top:1px solid var(--line);font-size:12.5px;color:var(--dim)}
+#target{color:var(--acc)}
+::selection{background:var(--sel)}
+body,.bar,.stat,button{transition:background-color .18s,color .18s,border-color .18s}
+@media (prefers-reduced-motion:reduce){body,.bar,.stat,button{transition:none}}
+#nav{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;background:rgba(0,0,0,.45);z-index:20}
+#nav[hidden]{display:none}
+#navpanel{margin-top:56px;width:min(640px,94vw);max-height:74vh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+#navcrumbs{display:flex;gap:5px;align-items:center;flex-wrap:wrap;padding:8px 11px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--dim)}
+#navcrumbs button{background:none;border:0;color:var(--acc);cursor:pointer;padding:1px 4px;font:inherit}
+#navfilter{margin-left:auto;color:var(--dim)}
+#navlist{overflow:auto;padding:5px}
+.navitem{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--fg)}
+.navitem.sel{background:var(--btn);outline:1px solid var(--acc);outline-offset:-1px}
+.navitem .dirc{color:var(--acc);min-width:14px;text-align:center}
+.navempty{padding:11px;color:var(--dim);font-size:12.5px}
+textarea::selection{background:var(--sel)}
+#back .hljs-keyword,#back .hljs-selector-tag,#back .hljs-literal{color:var(--tok-kw)}
+#back .hljs-string,#back .hljs-regexp,#back .hljs-template-tag{color:var(--tok-str)}
+#back .hljs-comment,#back .hljs-quote{color:var(--tok-com);font-style:italic}
+#back .hljs-number{color:var(--tok-num)}
+#back .hljs-title,#back .hljs-name,#back .hljs-section,#back .hljs-selector-id,#back .hljs-selector-class{color:var(--tok-fn)}
+#back .hljs-built_in,#back .hljs-type,#back .hljs-attr,#back .hljs-attribute,#back .hljs-meta,#back .hljs-symbol{color:var(--tok-type)}
+#bookl,#bookr{position:fixed;top:50%;transform:translateY(-50%);z-index:15;display:none;align-items:center;justify-content:center;width:42px;height:92px;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--fg);font-size:20px;cursor:pointer;opacity:.85}
+#bookl{left:10px}
+#bookr{right:10px}
+body.book #bookl,body.book #bookr{display:flex}
+#bookl:hover,#bookr:hover{border-color:var(--acc);color:var(--acc)}
+#booknum{color:var(--acc)}
+body.book main{align-items:center}
+body.book .editor{flex:none;width:min(76ch,100%);height:var(--book-h,60vh);margin:0 auto}
+body.book textarea{overflow:hidden}
+#navpath{padding:8px 11px;border-bottom:1px solid var(--line)}
+#pathin{width:100%;background:var(--btn);border:1px solid var(--line);border-radius:7px;color:var(--fg);font:inherit;font-size:12.5px;padding:6px 9px;outline:none}
+#pathin:focus{border-color:var(--acc)}
+</style>
+<!-- иконки: Rune Icons (github.com/Nexvyn/runeicons), Apache-2.0, стиль normal; stroke -> currentColor -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+<symbol id="i-sun" viewBox="0 0 24 24"><g fill="none"><path d="M12 2V4M12 20V22M4.93005 4.93018L6.34005 6.34018M17.66 17.6602L19.07 19.0702M2 12H4M20 12H22M6.34005 17.6602L4.93005 19.0702M19.07 4.93018L17.66 6.34018M16 12C16 14.2091 14.2091 16 12 16C9.79086 16 8 14.2091 8 12C8 9.79086 9.79086 8 12 8C14.2091 8 16 9.79086 16 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><g fill="none"><path d="M20.985 12.486C20.8912 14.2221 20.2966 15.894 19.273 17.2994C18.2494 18.7048 16.8406 19.7837 15.217 20.4055C13.5933 21.0274 11.8243 21.1656 10.1237 20.8035C8.42318 20.4414 6.86392 19.5945 5.63442 18.3651C4.40493 17.1358 3.55785 15.5766 3.19558 13.8761C2.83331 12.1756 2.97136 10.4065 3.59304 8.78279C4.21472 7.15906 5.29342 5.75016 6.69874 4.72641C8.10406 3.70265 9.77583 3.10788 11.512 3.01397C11.917 2.99197 12.129 3.47397 11.914 3.81697C11.1949 4.96753 10.8869 6.32784 11.0405 7.67592C11.194 9.024 11.7999 10.2803 12.7593 11.2396C13.7187 12.199 14.9749 12.805 16.323 12.9585C17.6711 13.112 19.0314 12.8041 20.182 12.085C20.526 11.87 21.007 12.081 20.985 12.486Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
+<symbol id="i-file-text" viewBox="0 0 24 24"><g fill="none"><path d="M14 2H6C5.46957 2 4.96086 2.21072 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8M14 2C14.3166 1.99949 14.6301 2.06161 14.9225 2.18277C15.215 2.30394 15.4806 2.48176 15.704 2.706L19.292 6.294C19.5168 6.51751 19.6952 6.78335 19.8167 7.07616C19.9382 7.36898 20.0005 7.68297 20 8M14 2V7C14 7.26522 14.1054 7.51957 14.2929 7.70711C14.4804 7.89464 14.7348 8 15 8L20 8M10 9H8M16 13H8M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
+<symbol id="i-folder-open" viewBox="0 0 24 24"><g fill="none"><path d="M6 14L7.5 11.1C7.66307 10.7761 7.91112 10.5027 8.21761 10.3089C8.5241 10.1152 8.8775 10.0084 9.24 9.99997H20M20 9.99997C20.3055 9.99944 20.6071 10.0689 20.8816 10.2031C21.1561 10.3372 21.3963 10.5325 21.5836 10.7738C21.7709 11.0152 21.9004 11.2963 21.9622 11.5955C22.024 11.8947 22.0164 12.2041 21.94 12.5L20.4 18.5C20.2886 18.9315 20.0362 19.3135 19.6829 19.5853C19.3296 19.857 18.8957 20.003 18.45 20H4C3.46957 20 2.96086 19.7893 2.58579 19.4142C2.21071 19.0391 2 18.5304 2 18V4.99997C2 4.46954 2.21071 3.96083 2.58579 3.58576C2.96086 3.21069 3.46957 2.99997 4 2.99997H7.9C8.23449 2.99669 8.56445 3.07736 8.8597 3.23459C9.15495 3.39183 9.40604 3.6206 9.59 3.89997L10.4 5.09997C10.5821 5.3765 10.83 5.60349 11.1215 5.76058C11.413 5.91766 11.7389 5.99992 12.07 5.99997H18C18.5304 5.99997 19.0391 6.21069 19.4142 6.58576C19.7893 6.96083 20 7.46954 20 7.99997V9.99997Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
+<symbol id="i-save" viewBox="0 0 24 24"><g fill="none"><path d="M17 21V14C17 13.7348 16.8946 13.4804 16.7071 13.2929C16.5196 13.1054 16.2652 13 16 13H8C7.73478 13 7.48043 13.1054 7.29289 13.2929C7.10536 13.4804 7 13.7348 7 14V21M7 3V7C7 7.26522 7.10536 7.51957 7.29289 7.70711C7.48043 7.89464 7.73478 8 8 8H15M15.2 3C15.7275 3.00751 16.2307 3.22317 16.6 3.6L20.4 7.4C20.7768 7.76926 20.9925 8.27246 21 8.8V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H15.2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><g fill="none"><path d="M4 16C2.9 16 2 15.1 2 14V4C2 2.9 2.9 2 4 2H14C15.1 2 16 2.9 16 4M10 8H20C21.1046 8 22 8.89543 22 10V20C22 21.1046 21.1046 22 20 22H10C8.89543 22 8 21.1046 8 20V10C8 8.89543 8.89543 8 10 8Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><g fill="none"><path d="M20 6L9 17L4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
+</svg>
+
+<div class="bar">
+  <b><svg class="ic" aria-hidden="true"><use href="#i-file-text"/></svg><span id="fname">__NAME__</span></b>
+  <div class="ctl">
+    <div class="seg">
+      <button id="minus" title="мельче">A−</button>
+      <button id="reset" title="размер шрифта; клик — вернуть 13px"><span id="fsval"></span></button>
+      <button id="plus" title="крупнее">A+</button>
+    </div>
+    <span class="sep" aria-hidden="true"></span>
+    <button id="theme"><svg class="ic" aria-hidden="true"><use id="themeuse" href="#i-moon"/></svg><span id="themelbl">тёмная</span></button>
+    <span class="sep" aria-hidden="true"></span>
+    <button id="open" title="открыть другой файл с диска"><svg class="ic" aria-hidden="true"><use href="#i-folder-open"/></svg>открыть файл…</button>
+    <button id="navbtn" title="файлы сервера (Ctrl+P)" hidden><svg class="ic" aria-hidden="true"><use href="#i-folder-open"/></svg>файлы</button>
+    <button id="bookbtn" title="режим книги: страницы влево-вправо">книга</button>
+    <button id="save" title="записать правки обратно в файл (Ctrl+S)"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg><span id="savelbl">сохранить</span></button>
+    <span class="sep" aria-hidden="true"></span>
+    <button id="cp"><svg class="ic" aria-hidden="true"><use id="cpuse" href="#i-copy"/></svg><span id="cplbl">копировать весь текст</span></button>
+  </div>
+</div>
+<input id="file" type="file" accept=".txt,.md,.log,.py,.sh,.js,.json,.yml,.yaml,.toml,.ini,.conf,.sql,.html,.css,.c,.h,.cpp,.go,.rs,text/plain" hidden>
+<main>
+  <div class="editor">
+    <div id="back" aria-hidden="true"></div>
+    <textarea id="t" spellcheck="false" wrap="soft"></textarea>
+  </div>
+</main>
+<button id="bookl" title="назад" tabindex="-1">&#8249;</button>
+<button id="bookr" title="вперёд" tabindex="-1">&#8250;</button>
+<div id="nav" hidden>
+  <div id="navpanel">
+    <div id="navpath"><input id="pathin" type="text" spellcheck="false" placeholder="путь к файлу или папке…"></div>
+    <div id="navcrumbs"></div>
+    <div id="navlist"></div>
+  </div>
+</div>
+<div class="stat"><span id="target"></span><span id="pos"></span><span id="cnt"></span><span id="booknum" hidden></span></div>
+<script src="/hljs.min.js"></script>
+<script>
+"use strict";
+window.addEventListener('error', e => {
+  const el = document.getElementById('cnt');
+  if(el) el.textContent = 'сбой: ' + e.message;
+});
+const RAW = __DATA__;
+const root = document.documentElement;
+const KEY = 'txtviewer';
+let st = {};
+try { st = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e){}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch(e){} };
+
+function applyTheme(){
+  const dark = st.theme === 'dark';
+  root.classList.toggle('light', !dark);
+  document.getElementById('themeuse').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+  document.getElementById('themelbl').textContent = dark ? 'светлая' : 'тёмная';
+  document.getElementById('theme').setAttribute('aria-pressed', dark ? 'true' : 'false');
+}
+const FS0 = 13;
+function applyFs(){
+  const fs = st.fs || FS0;
+  root.style.fontSize = fs + 'px';
+  document.getElementById('fsval').textContent = fs + 'px';
+  document.getElementById('reset').disabled = fs === FS0;
+}
+
+applyTheme();
+applyFs();
+const area = document.getElementById('t');
+const back = document.getElementById('back');
+let curName = '';
+const pos = document.getElementById('pos');
+const cnt = document.getElementById('cnt');
+const httpMode = /^https?:$/.test(location.protocol);
+
+function upd(){
+  const v = area.value;
+  const line = v.slice(0, area.selectionStart).split('\n').length;
+  pos.textContent = 'строка ' + line + ' / ' + v.split('\n').length;
+  cnt.textContent = v.length + ' символов';
+}
+['input','keyup','click','select','focus'].forEach(ev => area.addEventListener(ev, upd));
+
+area.value = RAW;
+area.setSelectionRange(0, 0);
+upd();
+
+let pending = false;
+let gutNow = '';
+function syncScroll(){ back.style.transform = 'translateY(' + (-area.scrollTop) + 'px)'; }
+function buildBack(){
+  const lines = area.value.split('\n');
+  const gut = 'calc(' + Math.max(3, String(lines.length).length + 1) + 'ch + 1.7rem)';
+  if(gut !== gutNow){ gutNow = gut; root.style.setProperty('--gut', gut); }
+  const frag = document.createDocumentFragment();
+  for(const t of lines){
+    const d = document.createElement('div');
+    d.className = 'ln';
+    d.textContent = t;
+    frag.append(d);
+  }
+  back.textContent = '';
+  back.append(frag);
+  back.style.width = area.clientWidth + 'px';
+  syncScroll();
+  upd();
+  highlightView();
+}
+function scheduleBack(){
+  if(pending) return;
+  pending = true;
+  requestAnimationFrame(() => { pending = false; buildBack(); });
+}
+const HL_LANGS = {py:'python',pyw:'python',js:'javascript',mjs:'javascript',cjs:'javascript',jsx:'javascript',ts:'typescript',tsx:'typescript',json:'json',md:'markdown',markdown:'markdown',sh:'bash',bash:'bash',zsh:'bash',yml:'yaml',yaml:'yaml',toml:'ini',ini:'ini',cfg:'ini',conf:'ini',service:'ini',desktop:'ini',html:'xml',htm:'xml',xml:'xml',css:'css',scss:'scss',c:'c',h:'c',cc:'cpp',cpp:'cpp',hpp:'cpp',go:'go',rs:'rust',java:'java',kt:'kotlin',rb:'ruby',php:'php',lua:'lua',pl:'perl',sql:'sql',diff:'diff',patch:'diff',cs:'csharp',swift:'swift',dart:'dart',ex:'elixir',exs:'elixir',erl:'erlang',hrl:'erlang',hs:'haskell',lhs:'haskell',clj:'clojure',cljs:'clojure',cljc:'clojure',scala:'scala',sc:'scala',groovy:'groovy',gvy:'groovy',gradle:'groovy',ps1:'powershell',psm1:'powershell',jl:'julia',tex:'latex',sty:'latex',proto:'protobuf',cmake:'cmake',mk:'makefile',bat:'dos',cmd:'dos',vbs:'vbscript',asm:'x86asm',s:'x86asm',f90:'fortran',f95:'fortran',for:'fortran',pas:'delphi',elm:'elm',lisp:'lisp',lsp:'lisp',scm:'scheme',tcl:'tcl',vim:'vim',vhd:'vhdl',vhdl:'vhdl',v:'verilog',sv:'verilog',thrift:'thrift',properties:'properties',nginx:'nginx',apache:'apache',http:'http',r:'r',awk:'awk',coffee:'coffeescript',fs:'fsharp',ipynb:'json',lock:'json'};
+const HL_NAMES = {Dockerfile:'dockerfile',Makefile:'makefile',makefile:'makefile',GNUmakefile:'makefile',CMakeLists:'cmake','.gitignore':'plaintext','.dockerignore':'plaintext','.editorconfig':'ini','.env':'properties','.bashrc':'bash','.zshrc':'bash','.vimrc':'vim'};
+let hlTimer = 0;
+function langOf(name){
+  const base = (name || '').split('/').pop();
+  if(HL_NAMES[base]) return HL_NAMES[base] === 'plaintext' ? '' : HL_NAMES[base];
+  if(base.startsWith('CMakeLists.')) return 'cmake';
+  const m = /\.([A-Za-z0-9]+)$/.exec(base);
+  return m ? (HL_LANGS[m[1].toLowerCase()] || '') : '';
+}
+function scheduleHighlight(){
+  clearTimeout(hlTimer);
+  hlTimer = setTimeout(highlightView, 80);
+}
+function hlSplit(html){
+  const out = [];
+  const stack = [];
+  let line = '';
+  let i = 0;
+  while(i < html.length){
+    if(html[i] === '<'){
+      const end = html.indexOf('>', i);
+      if(end === -1){ line += html.slice(i); break; }
+      const tag = html.slice(i, end + 1);
+      if(tag === '</span>'){ stack.pop(); line += tag; }
+      else {
+        const m = /class="([^"]*)"/.exec(tag);
+        stack.push(m ? m[1] : '');
+        line += tag;
+      }
+      i = end + 1;
+    } else if(html[i] === '\n'){
+      out.push(line + '</span>'.repeat(stack.length));
+      line = stack.map(c => c ? '<span class="' + c + '">' : '<span>').join('');
+      i++;
+    } else {
+      line += html[i];
+      i++;
+    }
+  }
+  out.push(line + '</span>'.repeat(stack.length));
+  return out;
+}
+function lineAtY(y){
+  const nodes = back.children;
+  let lo = 0;
+  let hi = nodes.length - 1;
+  let res = 0;
+  while(lo <= hi){
+    const mid = (lo + hi) >> 1;
+    const el = nodes[mid];
+    if(el.offsetTop + el.offsetHeight >= y){ res = mid; hi = mid - 1; }
+    else lo = mid + 1;
+  }
+  return res;
+}
+function lastLineAtY(y){
+  const nodes = back.children;
+  let lo = 0;
+  let hi = nodes.length - 1;
+  let res = nodes.length - 1;
+  while(lo <= hi){
+    const mid = (lo + hi) >> 1;
+    if(nodes[mid].offsetTop <= y){ res = mid; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  return res;
+}
+function highlightView(){
+  const lang = langOf(curName);
+  const nodes = back.children;
+  if(!lang || !nodes.length || !window.hljs || !window.hljs.getLanguage(lang)) return;
+  const start = Math.max(0, lineAtY(area.scrollTop) - 120);
+  const end = Math.min(nodes.length - 1, lastLineAtY(area.scrollTop + area.clientHeight) + 60);
+  const lines = area.value.split('\n');
+  const slice = lines.slice(start, end + 1).join('\n');
+  let html = '';
+  try { html = hljs.highlight(slice, {language: lang, ignoreIllegals: true}).value; }
+  catch(e){ return; }
+  const parts = hlSplit(html);
+  for(let i = 0; i < parts.length; i++){
+    const node = nodes[start + i];
+    if(node && node.innerHTML !== parts[i]) node.innerHTML = parts[i];
+  }
+}
+area.addEventListener('input', scheduleBack);
+area.addEventListener('scroll', () => { syncScroll(); scheduleHighlight(); });
+window.addEventListener('resize', () => { scheduleBack(); if(bookActive()) bookApply(); });
+document.querySelector('.editor').addEventListener('wheel', e => {
+  if(e.ctrlKey) return;
+  if(bookActive()){ e.preventDefault(); return; }
+  if(e.target === area) return;
+  e.preventDefault();
+  area.scrollTop += e.deltaY;
+}, {passive:false});
+scheduleBack();
+
+function zoomBy(d){
+  st.fs = Math.min(24, Math.max(11, (st.fs || FS0) + d));
+  applyFs();
+  scheduleBack();
+  save();
+}
+function zoomReset(){
+  delete st.fs;
+  applyFs();
+  scheduleBack();
+  save();
+}
+document.getElementById('plus').addEventListener('click', () => zoomBy(1));
+document.getElementById('minus').addEventListener('click', () => zoomBy(-1));
+document.getElementById('theme').addEventListener('click', () => { st.theme = root.classList.contains('light') ? 'dark' : 'light'; applyTheme(); save(); });
+document.getElementById('reset').addEventListener('click', () => zoomReset());
+
+document.getElementById('cp').addEventListener('click', async function(){
+  const btn = this;
+  const txt = document.getElementById('t').value;
+  try { await navigator.clipboard.writeText(txt); }
+  catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.append(ta); ta.select();
+    try { document.execCommand('copy'); } catch(e2){}
+    ta.remove();
+  }
+  const use = document.getElementById('cpuse');
+  const lbl = document.getElementById('cplbl');
+  use.setAttribute('href', '#i-check');
+  lbl.textContent = 'скопировано';
+  btn.classList.add('ok');
+  setTimeout(() => {
+    use.setAttribute('href', '#i-copy');
+    lbl.textContent = 'копировать весь текст';
+    btn.classList.remove('ok');
+  }, 900);
+});
+
+const saveBtn = document.getElementById('save');
+const savelbl = document.getElementById('savelbl');
+const target = document.getElementById('target');
+let dirty = false;
+const fileParam = new URLSearchParams(location.search).get('file');
+const serverFiles = [];
+let serverMode = false;
+let serverTarget = null;
+let readonlyPath = null;
+let rootPath = '';
+
+function canWrite(){ return !!serverTarget; }
+function targetText(){
+  if(readonlyPath) return 'только чтение: ' + readonlyPath;
+  if(serverTarget) return 'цель записи: ' + (rootPath ? rootPath + '/' + serverTarget : serverTarget + ' (сервер)');
+  if(serverMode) return 'цель записи: не выбрана — открой файл кнопкой';
+  return 'цель записи: некуда — запусти python3 ' + location.pathname.replace(/[^/]*$/, 'serve.py');
+}
+function setDirty(v){
+  dirty = v;
+  saveBtn.classList.toggle('dirty', v);
+  savelbl.textContent = v ? 'сохранить •' : (canWrite() ? 'сохранить' : 'сохранить некуда');
+  target.textContent = targetText();
+  try {
+    const q = serverTarget ? '?file=' + encodeURIComponent(serverTarget).replace(/%2F/g, '/') : '';
+    const next = location.pathname + q;
+    if(next !== location.pathname + location.search) history.replaceState(null, '', next);
+  } catch(e){}
+}
+
+function loadText(text, name){
+  curName = name || '';
+  area.value = text;
+  area.setSelectionRange(0, 0);
+  area.scrollTop = 0;
+  document.getElementById('fname').textContent = name || '';
+  setDirty(false);
+  scheduleBack();
+  upd();
+}
+
+area.addEventListener('input', () => {
+  setDirty(true);
+});
+
+function saved(){
+  setDirty(false);
+  savelbl.textContent = 'сохранено';
+  setTimeout(() => setDirty(dirty), 900);
+}
+
+async function saveFile(){
+  if(readonlyPath){
+    saveBtn.textContent = 'только чтение';
+    setTimeout(() => setDirty(dirty), 1200);
+    return;
+  }
+  if(!serverTarget){
+    savelbl.textContent = 'некуда писать';
+    setTimeout(() => setDirty(dirty), 1200);
+    return;
+  }
+  if(!area.value.trim() && !confirm('текст пустой — затереть файл?')) return;
+  try {
+    const r = await fetch('/__save?file=' + encodeURIComponent(serverTarget), {method:'POST', body: area.value});
+    if(r.ok){ saved(); return; }
+    savelbl.textContent = 'сервер не принял';
+  } catch(e){
+    savelbl.textContent = 'сервер недоступен';
+  }
+  setTimeout(() => setDirty(dirty), 1400);
+}
+
+saveBtn.addEventListener('click', saveFile);
+window.addEventListener('keydown', e => {
+  if((e.ctrlKey || e.metaKey) && 'sSыЫ'.indexOf(e.key) !== -1){
+    e.preventDefault();
+    saveFile();
+  }
+});
+window.addEventListener('beforeunload', e => {
+  if(!dirty) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
+const navbtn = document.getElementById('navbtn');
+const nav = document.getElementById('nav');
+const navcrumbs = document.getElementById('navcrumbs');
+const navlist = document.getElementById('navlist');
+let navDir = '';
+let navAbs = false;
+let navSel = 0;
+let navFilter = '';
+let navItems = [];
+
+function navClose(){ nav.hidden = true; navFilter = ''; }
+function navFiltered(){
+  const f = navFilter.toLowerCase();
+  return navItems.filter(it => it.kind === 'up' || !f || it.name.toLowerCase().indexOf(f) !== -1);
+}
+function navCrumbs(){
+  navcrumbs.textContent = '';
+  if(navAbs){
+    const rootBtn = document.createElement('button');
+    rootBtn.textContent = '/';
+    rootBtn.addEventListener('click', () => loadAbsTree('/'));
+    navcrumbs.append(rootBtn);
+    let acc = '';
+    let first = true;
+    for(const part of navDir.split('/').filter(Boolean)){
+      acc += '/' + part;
+      if(!first){
+        const sep = document.createElement('span');
+        sep.textContent = '/';
+        navcrumbs.append(sep);
+      }
+      first = false;
+      const b = document.createElement('button');
+      b.textContent = part;
+      const dest = acc;
+      b.addEventListener('click', () => loadAbsTree(dest));
+      navcrumbs.append(b);
+    }
+    if(navFilter){
+      const fx = document.createElement('span');
+      fx.id = 'navfilter';
+      fx.textContent = 'фильтр: ' + navFilter;
+      navcrumbs.append(fx);
+    }
+    return;
+  }
+  const rootBtn = document.createElement('button');
+  rootBtn.textContent = rootPath.split('/').filter(Boolean).pop() || 'корень';
+  rootBtn.addEventListener('click', () => openNav(''));
+  navcrumbs.append(rootBtn);
+  let acc = '';
+  for(const part of (navDir ? navDir.split('/') : [])){
+    acc = acc ? acc + '/' + part : part;
+    const sep = document.createElement('span');
+    sep.textContent = '/';
+    const b = document.createElement('button');
+    b.textContent = part;
+    const dir = acc;
+    b.addEventListener('click', () => openNav(dir));
+    navcrumbs.append(sep, b);
+  }
+  if(navFilter){
+    const fx = document.createElement('span');
+    fx.id = 'navfilter';
+    fx.textContent = 'фильтр: ' + navFilter;
+    navcrumbs.append(fx);
+  }
+}
+function renderNav(){
+  navCrumbs();
+  const items = navFiltered();
+  if(navSel >= items.length) navSel = items.length ? items.length - 1 : 0;
+  navlist.textContent = '';
+  if(!items.length){
+    const d = document.createElement('div');
+    d.className = 'navempty';
+    d.textContent = navFilter ? 'ничего не найдено' : 'пусто';
+    navlist.append(d);
+    return;
+  }
+  items.forEach((it, i) => {
+    const row = document.createElement('div');
+    row.className = 'navitem' + (i === navSel ? ' sel' : '');
+    const ic = document.createElement('span');
+    ic.className = 'dirc';
+    ic.textContent = it.kind === 'up' ? '..' : (it.kind === 'dir' ? '→' : '·');
+    const label = document.createElement('span');
+    label.textContent = it.kind === 'up' ? 'наверх' : it.name;
+    row.append(ic, label);
+    row.addEventListener('click', () => navActivate(i));
+    navlist.append(row);
+  });
+  const sel = navlist.querySelector('.navitem.sel');
+  if(sel) sel.scrollIntoView({block: 'nearest'});
+}
+function navActivate(i){
+  const it = navFiltered()[i];
+  if(!it) return;
+  if(it.kind === 'file'){
+    if(navAbs) openAbsFile(it.rel).then(ok => { if(ok) navClose(); });
+    else { openServerFile(it.rel); navClose(); }
+    return;
+  }
+  if(navAbs) loadAbsTree(it.rel);
+  else openNav(it.rel);
+}
+async function loadTree(dir){
+  try {
+    const r = await fetch('/__tree?dir=' + encodeURIComponent(dir));
+    if(!r.ok){
+      if(dir) loadTree('');
+      return;
+    }
+    const data = await r.json();
+    navAbs = false;
+    navDir = data.dir || '';
+    if(document.activeElement !== pathin) pathin.value = navDir ? rootPath + '/' + navDir : rootPath;
+    st.navdir = navDir;
+    save();
+    navItems = [];
+    if(data.dir !== '' && data.parent !== null) navItems.push({kind: 'up', rel: data.parent, name: ''});
+    for(const d of (data.dirs || [])) navItems.push({kind: 'dir', rel: d, name: d.split('/').pop()});
+    for(const f of (data.files || [])) navItems.push({kind: 'file', rel: f, name: f.split('/').pop()});
+    navFilter = '';
+    navSel = 0;
+    renderNav();
+  } catch(e){}
+}
+function openNav(dir){
+  nav.hidden = false;
+  loadTree(dir || '');
+}
+navbtn.addEventListener('click', () => openNav(st.navdir || ''));
+const pathin = document.getElementById('pathin');
+let pathNoteT = 0;
+function navNote(msg){
+  pathin.placeholder = msg;
+  clearTimeout(pathNoteT);
+  pathNoteT = setTimeout(() => { pathin.placeholder = 'путь к файлу или папке…'; }, 3500);
+}
+async function openAbsFile(abs){
+  try {
+    const r = await fetch('/__file?path=' + encodeURIComponent(abs));
+    if(r.status === 415){ navNote('не текст: ' + abs); return false; }
+    if(!r.ok){ navNote('не нашёл: ' + abs); return false; }
+    const txt = await r.text();
+    readonlyPath = abs;
+    serverTarget = null;
+    loadText(txt, abs.split('/').filter(Boolean).pop());
+    target.textContent = 'только чтение: ' + abs;
+    navClose();
+    return true;
+  } catch(e){
+    navNote('ошибка чтения: ' + abs);
+    return false;
+  }
+}
+async function loadAbsTree(abs){
+  try {
+    const r = await fetch('/__dir?path=' + encodeURIComponent(abs));
+    if(!r.ok){ navNote('не пускает: ' + abs); return; }
+    const data = await r.json();
+    navAbs = true;
+    navDir = data.dir || '/';
+    navItems = [];
+    if(data.parent) navItems.push({kind: 'up', rel: data.parent, name: ''});
+    for(const d of (data.dirs || [])) navItems.push({kind: 'dir', rel: d, name: d.split('/').filter(Boolean).pop()});
+    for(const f of (data.files || [])) navItems.push({kind: 'file', rel: f, name: f.split('/').filter(Boolean).pop()});
+    navFilter = '';
+    navSel = 0;
+    if(document.activeElement !== pathin) pathin.value = navDir;
+    renderNav();
+  } catch(e){}
+}
+async function pathOpen(rel){
+  const t = await fetch('/__tree?dir=' + encodeURIComponent(rel)).catch(() => null);
+  if(t && t.ok){ loadTree(rel); return; }
+  const l = await fetch('/__list').catch(() => null);
+  if(l && l.ok){
+    const data = await l.json();
+    const files = (data && data.files) || [];
+    serverFiles.length = 0;
+    serverFiles.push(...files);
+    if(files.indexOf(rel) !== -1){ openServerFile(rel); navClose(); return; }
+  }
+  navNote('не нашёл: ' + (rel || '/'));
+}
+async function pathOpenAbs(abs){
+  const d = await fetch('/__dir?path=' + encodeURIComponent(abs)).catch(() => null);
+  if(d && d.ok){ loadAbsTree(abs); return; }
+  await openAbsFile(abs);
+}
+function pathResolve(raw){
+  let p = (raw || '').trim().replace(/^["']+|["']+$/g, '').replace(/\\/g, '/');
+  while(p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
+  if(p.startsWith('~')){ navNote('~ не понимаю — дай полный путь или путь от корня'); return; }
+  const rootAbs = rootPath.replace(/\/+$/, '');
+  if(p.startsWith('/')){
+    if(p === rootAbs || p + '' === rootAbs){ p = ''; }
+    else if(p.startsWith(rootAbs + '/')){ p = p.slice(rootAbs.length + 1); }
+    else { pathOpenAbs(p); return; }
+  }
+  pathOpen(p);
+}
+pathin.addEventListener('keydown', e => {
+  if(e.key === 'Enter'){ e.preventDefault(); pathResolve(pathin.value); }
+  else if(e.key === 'Escape'){ e.preventDefault(); navClose(); }
+});
+nav.addEventListener('click', e => { if(e.target === nav) navClose(); });
+window.addEventListener('keydown', e => {
+  if((e.ctrlKey || e.metaKey) && 'pPзЗ'.indexOf(e.key) !== -1){
+    e.preventDefault();
+    if(nav.hidden) openNav(st.navdir || '');
+    else navClose();
+    return;
+  }
+  if(nav.hidden) return;
+  const items = navFiltered();
+  if(e.key === 'Escape'){ e.preventDefault(); navClose(); }
+  else if(e.key === 'ArrowDown'){ e.preventDefault(); navSel = Math.min(items.length - 1, navSel + 1); renderNav(); }
+  else if(e.key === 'ArrowUp'){ e.preventDefault(); navSel = Math.max(0, navSel - 1); renderNav(); }
+  else if(e.key === 'Enter'){ e.preventDefault(); navActivate(navSel); }
+  else if(e.key === 'Backspace'){
+    e.preventDefault();
+    if(navFilter){ navFilter = navFilter.slice(0, -1); navSel = 0; renderNav(); }
+    else {
+      const up = navItems.find(it => it.kind === 'up');
+      if(up) openNav(up.rel);
+    }
+  }
+  else if(e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey){
+    e.preventDefault();
+    navFilter += e.key;
+    navSel = 0;
+    renderNav();
+  }
+});
+
+const fileInput = document.getElementById('file');
+document.getElementById('open').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', async () => {
+  const f = fileInput.files && fileInput.files[0];
+  if(!f) return;
+  const txt = await f.text();
+  const matches = serverFiles.filter(p => p.split('/').pop() === f.name);
+  const rel = matches.length === 1 ? matches[0] : null;
+  serverTarget = rel;
+  if(rel){ readonlyPath = null; st.file = rel; st.navdir = rel.indexOf('/') >= 0 ? rel.replace(/\/[^/]*$/, '') : ''; save(); }
+  loadText(txt, f.name);
+  if(!rel){
+    target.textContent = !serverMode ? 'без сервера правки писать некуда' :
+      matches.length > 1 ? 'файлов с таким именем несколько — писать некуда' : 'файл вне папки сервера — писать некуда';
+    setTimeout(() => setDirty(dirty), 4000);
+  }
+});
+
+function openServerFile(rel){
+  if(!rel) return;
+  serverTarget = rel;
+  setDirty(dirty);
+  fetch('/' + rel).then(r => {
+    if(!r.ok) throw new Error(r.status);
+    return r.text();
+  }).then(txt => {
+    readonlyPath = null;
+    st.file = rel;
+    st.navdir = rel.indexOf('/') >= 0 ? rel.replace(/\/[^/]*$/, '') : '';
+    save();
+    loadText(txt, rel.split('/').pop());
+  }).catch(() => {
+    serverTarget = null;
+    cnt.textContent = 'не прочитал: ' + rel;
+    setDirty(dirty);
+  });
+}
+
+async function initServer(){
+  if(!/^https?:$/.test(location.protocol)) return;
+  try {
+    const r = await fetch('/__list');
+    if(!r.ok) return;
+    const data = await r.json();
+    const files = Array.isArray(data) ? data : (data && data.files);
+    if(!Array.isArray(files)) return;
+    serverMode = true;
+    navbtn.hidden = false;
+    rootPath = (data && data.root) || '';
+    serverFiles.length = 0;
+    serverFiles.push(...files);
+    if(serverTarget){
+      // уже открывается по ?file= или старой памяти
+    } else if(st.file && files.indexOf(st.file) !== -1){
+      openServerFile(st.file);
+    } else {
+      loadText('', '');
+    }
+    setDirty(dirty);
+  } catch(e){}
+}
+
+if(fileParam && /^https?:$/.test(location.protocol)) openServerFile(fileParam);
+initServer();
+const bookbtn = document.getElementById('bookbtn');
+const bookl = document.getElementById('bookl');
+const bookr = document.getElementById('bookr');
+const booknum = document.getElementById('booknum');
+let bookRowsN = 10;
+let bookPageN = 1;
+function bookLineH(){ return parseFloat(getComputedStyle(area).lineHeight) || 20; }
+function bookActive(){ return document.body.classList.contains('book'); }
+function bookPageH(){ return bookRowsN * bookLineH(); }
+function bookPages(){ return Math.max(1, Math.ceil(area.scrollHeight / bookPageH())); }
+function bookCurrent(){
+  const last = Math.max(0, area.scrollHeight - area.clientHeight);
+  if(area.scrollTop >= last - 1) return bookPages();
+  return Math.min(bookPages(), Math.round(area.scrollTop / bookPageH()) + 1);
+}
+function bookUpdate(){
+  if(!bookActive()) return;
+  booknum.textContent = bookPageN + ' / ' + bookPages();
+}
+function bookTarget(){
+  return Math.min((bookPageN - 1) * bookPageH(), Math.max(0, area.scrollHeight - area.clientHeight));
+}
+function bookApply(){
+  if(!bookActive()) return;
+  const lh = bookLineH();
+  const mainEl = document.querySelector('main');
+  bookRowsN = Math.max(3, Math.floor((mainEl.clientHeight - 2) / lh));
+  root.style.setProperty('--book-h', (bookRowsN * lh) + 'px');
+  scheduleBack();
+  bookPageN = bookCurrent();
+  area.scrollTop = bookTarget();
+  bookUpdate();
+}
+function bookGoto(n){
+  bookPageN = Math.min(Math.max(1, n), bookPages());
+  area.scrollTop = bookTarget();
+  bookUpdate();
+}
+function bookToggle(on){
+  const to = on === undefined ? !bookActive() : on;
+  document.body.classList.toggle('book', to);
+  bookbtn.classList.toggle('on', to);
+  bookbtn.setAttribute('aria-pressed', to ? 'true' : 'false');
+  st.book = to ? 1 : 0;
+  save();
+  booknum.hidden = !to;
+  if(to){
+    area.blur();
+    bookApply();
+  } else {
+    root.style.removeProperty('--book-h');
+    scheduleBack();
+  }
+}
+bookbtn.addEventListener('click', () => bookToggle());
+bookl.addEventListener('click', () => bookGoto(bookCurrent() - 1));
+bookr.addEventListener('click', () => bookGoto(bookCurrent() + 1));
+area.addEventListener('scroll', () => {
+  if(!bookActive()) return;
+  const target = bookTarget();
+  if(Math.abs(area.scrollTop - target) > 0.5) area.scrollTop = target;
+  bookUpdate();
+});
+window.addEventListener('keydown', e => {
+  if(!bookActive() || e.ctrlKey || e.metaKey || e.altKey) return;
+  if(e.key === 'ArrowLeft' || e.key === 'PageUp'){ e.preventDefault(); bookGoto(bookCurrent() - 1); }
+  else if(e.key === 'ArrowRight' || e.key === 'PageDown'){ e.preventDefault(); bookGoto(bookCurrent() + 1); }
+});
+if(st.book) bookToggle(true);
+setDirty(false);
+</script>
+</html>
+'''
+
+
+def main():
+    text = SRC.read_text(encoding='utf-8')
+    data = json.dumps(text, ensure_ascii=False)
+    for a, b in (('<', '\\u003c'), ('\u2028', '\\u2028'), ('\u2029', '\\u2029')):
+        data = data.replace(a, b)
+    page = TPL.replace('__NAME__', SRC.name).replace('__DATA__', data)
+    DST.write_text(page, encoding='utf-8')
+    print('%s: %d символов из %s' % (DST, len(text), SRC))
+
+
+if __name__ == '__main__':
+    main()
