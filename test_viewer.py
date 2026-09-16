@@ -14,6 +14,8 @@ import tempfile
 import time
 import urllib.request
 
+import json
+
 from playwright.sync_api import sync_playwright
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -273,9 +275,10 @@ def hello(name: str) -> str:
 ''', encoding='utf-8')
         (root / 'tool.diff').write_text('--- a\n+++ b\n-старая строка\n+новая строка\n общая\n', encoding='utf-8')
         (root / 'empty.md').write_text('', encoding='utf-8')
-        (root / 'search.txt').write_text('яблоко в строке\nгруша и яблоко\nяблоко яблоко\nслива\n'
-                                         + ''.join('строка %d\n' % i for i in range(5, 80))
+        (root / 'search.txt').write_text('яблоко в строке\nгруша и яблоко\nяблоко яблоко\nслива\nMARKER строка тут\n'
+                                         + ''.join('строка %d\n' % i for i in range(6, 80))
                                          + 'слива на последней странице\n', encoding='utf-8')
+        (root / 'search2.txt').write_text('MARKER в другом файле\nвторая строка про сливу\n', encoding='utf-8')
         page.goto(base + '?file=longline.txt')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.getElementById('t').value.length > 0")
@@ -559,6 +562,32 @@ def hello(name: str) -> str:
         check('поиск в книге: прыжок перелистывает на страницу с совпадением', before != after, before + ' -> ' + after)
         page.click('#bookbtn')
         page.wait_for_timeout(200)
+
+        g = json.loads(urllib.request.urlopen(base + '__grep?q=MARKER').read().decode('utf-8'))
+        check('поиск по корню: json отдаёт файлы, строки и счётчики',
+              g['files_total'] == 2 and g['hits_total'] == 2, str({k: g[k] for k in ('files_total', 'hits_total', 'truncated')}))
+        g2 = json.loads(urllib.request.urlopen(base + '__grep?q=marker&case=1').read().decode('utf-8'))
+        check('поиск по корню: учитывает регистр', g2['hits_total'] == 0, str(g2['hits_total']))
+
+        page.keyboard.press('Control+p')
+        page.wait_for_selector('#nav:not([hidden])')
+        page.fill('#navgrep', 'marker')
+        page.press('#navgrep', 'Enter')
+        page.wait_for_function("document.querySelectorAll('#navlist .navitem .hittext').length >= 2")
+        hits = page.eval_on_selector_all('#navlist .navitem', 'els => els.map(e => e.textContent)')
+        check('поиск по корню: список показывает совпадения из разных файлов',
+              any('search.txt:' in h for h in hits) and any('search2.txt:' in h for h in hits), str(hits))
+        page.click('#navlist .navitem:has(.hittext)')
+        page.wait_for_function("document.getElementById('fname').textContent === 'search.txt'")
+        page.wait_for_timeout(400)
+        gh = page.evaluate("""() => ({find: !document.getElementById('findwrap').hidden,
+                                      cnt: document.getElementById('findcnt').textContent,
+                                      val: document.getElementById('findin').value,
+                                      cur: CSS.highlights.get('find-cur') ? CSS.highlights.get('find-cur').size : -1,
+                                      line: document.getElementById('back').children[4].offsetTop,
+                                      top: document.getElementById('t').scrollTop})""")
+        check('поиск по корню: клик открывает файл, ищет в нём и встаёт на строку',
+              gh['find'] and gh['val'] == 'marker' and gh['cnt'] == '1 / 1' and gh['cur'] == 1 and gh['line'] - gh['top'] >= 0, str(gh))
         page.goto(base + '?file=big.py')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.querySelector('#back .ln .hljs-number') !== null")

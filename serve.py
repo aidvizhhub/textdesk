@@ -140,6 +140,48 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
+        if path == '/__grep':
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            q = (qs.get('q') or [''])[0].strip()
+            cs = (qs.get('case') or ['0'])[0] == '1'
+            if len(q) < 2:
+                self.send_error(400, 'need at least 2 chars')
+                return
+            needle = q if cs else q.lower()
+            files_out, hits_total, truncated = [], 0, False
+            for rel in scan_files():
+                p = ROOT / rel
+                try:
+                    if p.stat().st_size > MAX_VIEW:
+                        continue
+                    data = p.read_text(encoding='utf-8')
+                except (OSError, UnicodeDecodeError):
+                    continue
+                found = []
+                for i, line in enumerate(data.split('\n'), 1):
+                    hay = line if cs else line.lower()
+                    pos = hay.find(needle)
+                    if pos < 0:
+                        continue
+                    found.append({'line': i, 'col': pos + 1, 'text': line.strip()[:160]})
+                    if len(found) >= 8:
+                        truncated = True
+                        break
+                if not found:
+                    continue
+                files_out.append({'file': rel, 'hits': found})
+                hits_total += len(found)
+                if hits_total >= 120 or len(files_out) >= 40:
+                    truncated = True
+                    break
+            body = json.dumps({'q': q, 'case': cs, 'files': files_out, 'files_total': len(files_out),
+                               'hits_total': hits_total, 'truncated': truncated}, ensure_ascii=False).encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path == '/__list':
             files = scan_files()
             body = json.dumps({'root': str(ROOT), 'files': files}, ensure_ascii=False).encode('utf-8')

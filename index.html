@@ -140,8 +140,11 @@ body.book #back{left:0;top:0;width:calc(100% + 2ch) !important}
 body.book #back .ln{padding-left:calc(var(--gut) + 1.6rem + 2ch);text-indent:-2ch}
 body.book textarea{margin:var(--bpy) var(--bpx);overflow:hidden}
 body.book #wrapbtn{display:none}
-#navpath{padding:8px 11px;border-bottom:1px solid var(--line)}
-#pathin{width:100%;background:var(--btn);border:1px solid var(--line);border-radius:7px;color:var(--fg);font:inherit;font-size:12.5px;padding:6px 9px;outline:none}
+#navpath{display:flex;flex-direction:column;gap:6px;padding:8px 11px;border-bottom:1px solid var(--line)}
+#pathin,#navgrep{width:100%;background:var(--btn);border:1px solid var(--line);border-radius:7px;color:var(--fg);font:inherit;font-size:12.5px;padding:6px 9px;outline:none}
+#pathin:focus,#navgrep:focus{border-color:var(--acc)}
+.navitem .hittext{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.navitem .hitname{flex:none}
 #findwrap{display:inline-flex;align-items:center;gap:7px}
 #findin{width:min(24ch,34vw);background:var(--btn);border:1px solid var(--line);border-radius:7px;color:var(--fg);font:inherit;font-size:12.5px;padding:5px 8px;outline:none}
 #findin:focus{border-color:var(--acc)}
@@ -196,7 +199,7 @@ body.book #wrapbtn{display:none}
 <button id="bookr" title="вперёд" tabindex="-1">&#8250;</button>
 <div id="nav" hidden>
   <div id="navpanel">
-    <div id="navpath"><input id="pathin" type="text" spellcheck="false" placeholder="путь к файлу или папке…"></div>
+    <div id="navpath"><input id="pathin" type="text" spellcheck="false" placeholder="путь к файлу или папке…"><input id="navgrep" type="text" spellcheck="false" placeholder="поиск по корню, min 2 символа… (Enter)"></div>
     <div id="navcrumbs"></div>
     <div id="navlist"></div>
   </div>
@@ -558,6 +561,14 @@ function loadText(text, name){
   setDirty(false);
   scheduleBack();
   upd();
+  if(pendingFind){
+    const pf = pendingFind;
+    pendingFind = null;
+    findin.value = pf.q;
+    findwrap.hidden = false;
+    findRun(false);
+    findJumpToLine(pf.line);
+  }
 }
 
 area.addEventListener('input', () => {
@@ -614,6 +625,8 @@ let navAbs = false;
 let navSel = 0;
 let navFilter = '';
 let navItems = [];
+let navGrep = null;
+let pendingFind = null;
 
 function navClose(){ nav.hidden = true; navFilter = ''; }
 function navFiltered(){
@@ -692,8 +705,18 @@ function renderNav(){
     ic.className = 'dirc';
     ic.textContent = it.kind === 'up' ? '..' : (it.kind === 'dir' ? '→' : '·');
     const label = document.createElement('span');
-    label.textContent = it.kind === 'up' ? 'наверх' : it.name;
-    row.append(ic, label);
+    if(it.kind === 'hit'){
+      ic.textContent = '•';
+      label.className = 'hitname';
+      label.textContent = it.name;
+      const txt = document.createElement('span');
+      txt.className = 'hittext';
+      txt.textContent = it.text || '';
+      row.append(ic, label, txt);
+    } else {
+      label.textContent = it.kind === 'up' ? 'наверх' : it.name;
+      row.append(ic, label);
+    }
     row.addEventListener('click', () => navActivate(i));
     navlist.append(row);
   });
@@ -703,6 +726,12 @@ function renderNav(){
 function navActivate(i){
   const it = navFiltered()[i];
   if(!it) return;
+  if(it.kind === 'hit'){
+    navClose();
+    pendingFind = {q: navGrep ? navGrep.q : '', line: it.line};
+    openServerFile(it.rel);
+    return;
+  }
   if(it.kind === 'file'){
     if(navAbs) openAbsFile(it.rel).then(ok => { if(ok) navClose(); });
     else { openServerFile(it.rel); navClose(); }
@@ -723,6 +752,7 @@ async function loadTree(dir){
     const data = await r.json();
     if(seq !== navSeq) return;
     navAbs = false;
+    navGrep = null;
     navDir = data.dir || '';
     if(document.activeElement !== pathin) pathin.value = navDir ? rootPath + '/' + navDir : rootPath;
     st.navdir = navDir;
@@ -742,6 +772,42 @@ function openNav(dir){
 }
 navbtn.addEventListener('click', () => openNav(st.navdir || ''));
 const pathin = document.getElementById('pathin');
+const navgrep = document.getElementById('navgrep');
+navgrep.addEventListener('keydown', async e => {
+  if(e.key === 'Escape'){
+    e.preventDefault();
+    navgrep.value = '';
+    navGrep = null;
+    openNav(navDir);
+    return;
+  }
+  if(e.key !== 'Enter') return;
+  e.preventDefault();
+  const q = navgrep.value.trim();
+  if(q.length < 2){ navNote('для поиска нужно минимум 2 символа'); return; }
+  navNote('ищу: ' + q + '…');
+  try {
+    const r = await fetch('/__grep?q=' + encodeURIComponent(q) + '&case=' + (findCase ? 1 : 0));
+    if(!r.ok){ navNote('поиск не принял запрос'); return; }
+    const data = await r.json();
+    navGrep = {q: q, case: findCase};
+    navAbs = false;
+    navFilter = '';
+    navItems = [];
+    for(const f of (data.files || [])){
+      for(const h of f.hits){
+        navItems.push({kind: 'hit', rel: f.file, line: h.line, text: h.text,
+                       name: f.file.split('/').pop() + ':' + h.line});
+      }
+    }
+    navSel = 0;
+    renderNav();
+    navNote(data.hits_total ? ('найдено ' + data.hits_total + ' в ' + data.files_total + ' файлах' + (data.truncated ? ' (обрезано)' : ''))
+                            : 'ничего не найдено');
+  } catch(err){
+    navNote('поиск не ответил');
+  }
+});
 let pathNoteT = 0;
 function navNote(msg){
   pathin.placeholder = msg;
@@ -773,6 +839,7 @@ async function loadAbsTree(abs){
     const data = await r.json();
     if(seq !== navSeq) return;
     navAbs = true;
+    navGrep = null;
     navDir = data.dir || '/';
     navItems = [];
     if(data.parent) navItems.push({kind: 'up', rel: data.parent, name: ''});
@@ -1112,6 +1179,11 @@ function findJump(){
     }
   }
   paintFind();
+}
+function findJumpToLine(line){
+  const at = findHits.findIndex(h => h[0] === line - 1);
+  if(at >= 0) findIdx = at;
+  findJump();
 }
 function findOpen(on){
   findwrap.hidden = !on;
