@@ -34,7 +34,7 @@ try {
   --btn:#2a3038; --btnfg:#e3e7ec; --acc:#ffd43b;
   --tok-kw:#c792ea; --tok-str:#95d18f; --tok-com:#6b7683; --tok-num:#ffb86c; --tok-fn:#82aaff; --tok-type:#7fd1e0; --sel:rgba(255,212,59,.30); --sel:rgba(255,212,59,.26);
   --gut:calc(4ch + 1.7rem);
-  --bpy:20px; --bpx:28px;
+  --bpy:24px; --bpx:34px;
   color-scheme:dark;
   scrollbar-color:#454d57 transparent;
 }
@@ -74,9 +74,9 @@ main{flex:1;display:flex;width:100%;padding:1.2rem clamp(1rem,4vw,2.6rem) 1.4rem
 .editor{flex:1;display:flex;min-height:0;position:relative;overflow:hidden}
 .editor::before{content:'';position:absolute;left:var(--gut);top:0;bottom:0;width:1px;background:var(--line);z-index:2;pointer-events:none}
 #back{position:absolute;left:0;top:0;overflow:hidden;pointer-events:none;user-select:none;color:var(--fg);white-space:pre-wrap;overflow-wrap:break-word;counter-reset:line;will-change:transform;z-index:0}
-#back .ln{position:relative;padding-left:calc(var(--gut) + .9rem);counter-increment:line;min-height:1.6em}
-#back .ln::before{content:counter(line);position:absolute;left:0;width:calc(var(--gut) - 1.7rem);text-align:right;color:var(--dim);font-size:.8rem}
-textarea{flex:1;width:100%;min-height:0;background:transparent;border:0;padding:0 0 0 calc(var(--gut) + .9rem);outline:none;resize:none;color:transparent;caret-color:var(--fg);font:inherit;white-space:pre-wrap;overflow-wrap:break-word;position:relative;z-index:1;overflow:auto}
+#back .ln{position:relative;padding-left:calc(var(--gut) + 1.4rem);counter-increment:line;min-height:1.6em}
+#back .ln::before{content:counter(line);position:absolute;left:0;width:calc(var(--gut) - 2.2rem);text-align:right;color:var(--dim);font-size:.8rem}
+textarea{flex:1;width:100%;min-height:0;background:transparent;border:0;padding:0 0 0 calc(var(--gut) + 1.4rem);outline:none;resize:none;color:transparent;caret-color:var(--fg);font:inherit;white-space:pre-wrap;overflow-wrap:break-word;position:relative;z-index:1;overflow:auto}
 textarea::-webkit-scrollbar{width:.55rem;height:.55rem}
 textarea::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
 .stat{display:flex;gap:19px;padding:8px clamp(16px,4vw,38px);background:var(--panel);border-top:1px solid var(--line);font-size:12.5px;color:var(--dim)}
@@ -108,8 +108,10 @@ textarea::selection{background:var(--sel)}
 body.book #bookl,body.book #bookr{display:flex}
 #bookl:hover,#bookr:hover{border-color:var(--acc);color:var(--acc)}
 #booknum{color:var(--acc)}
+#bookpage{width:3.6ch;background:transparent;border:0;border-bottom:1px solid transparent;color:var(--acc);font:inherit;font-size:inherit;text-align:right;outline:none;padding:0}
+#bookpage:focus{border-bottom-color:var(--acc)}
 body.book main{align-items:center;background:color-mix(in srgb, var(--fg) 6%, var(--bg))}
-body.book .editor{flex:none;width:min(72ch,100%);height:var(--book-h,60vh);margin:0 auto;line-height:1.75;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.30)}
+body.book .editor{flex:none;width:min(78ch,100%);height:var(--book-h,60vh);margin:0 auto;line-height:1.75;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.30)}
 body.book #back{left:var(--bpx);top:var(--bpy)}
 body.book textarea{margin:var(--bpy) var(--bpx);overflow:hidden}
 #navpath{padding:8px 11px;border-bottom:1px solid var(--line)}
@@ -162,7 +164,7 @@ body.book textarea{margin:var(--bpy) var(--bpx);overflow:hidden}
     <div id="navlist"></div>
   </div>
 </div>
-<div class="stat"><span id="target"></span><span id="pos"></span><span id="cnt"></span><span id="booknum" hidden></span></div>
+<div class="stat"><span id="target"></span><span id="pos"></span><span id="cnt"></span><span id="booknum" hidden><input id="bookpage" type="text" inputmode="numeric" value="1" title="номер страницы — введи и жми Enter"> / <span id="booktotal"></span></span></div>
 <script src="hljs.min.js"></script>
 <script>
 "use strict";
@@ -233,7 +235,7 @@ function buildBack(){
   syncScroll();
   upd();
   highlightView();
-  if(bookActive()) bookLayout();
+  if(bookActive()){ bookLayout(); bookShow(); }
 }
 function scheduleBack(){
   if(pending) return;
@@ -326,6 +328,21 @@ function highlightView(){
   }
 }
 area.addEventListener('input', scheduleBack);
+const bookpageInp = document.getElementById('bookpage');
+bookpageInp.addEventListener('focus', () => bookpageInp.select());
+bookpageInp.addEventListener('input', () => { bookpageInp.value = bookpageInp.value.replace(/\D/g, ''); });
+bookpageInp.addEventListener('keydown', e => {
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    const n = parseInt(bookpageInp.value, 10);
+    if(n >= 1) bookGoto(n);
+    bookpageInp.blur();
+  } else if(e.key === 'Escape'){
+    e.preventDefault();
+    bookpageInp.value = bookPageN;
+    bookpageInp.blur();
+  }
+});
 area.addEventListener('scroll', () => { syncScroll(); scheduleHighlight(); });
 window.addEventListener('resize', () => { scheduleBack(); if(bookActive()) bookApply(); });
 document.querySelector('.editor').addEventListener('wheel', e => {
@@ -802,7 +819,9 @@ function bookLayout(){
 function bookPages(){ return Math.max(1, bookStarts.length); }
 function bookUpdate(){
   if(!bookActive()) return;
-  booknum.textContent = bookPageN + ' / ' + bookPages();
+  document.getElementById('booktotal').textContent = bookPages();
+  const inp = document.getElementById('bookpage');
+  if(document.activeElement !== inp) inp.value = bookPageN;
 }
 function bookTarget(){
   return Math.min(bookStarts[Math.min(bookPageN, bookPages()) - 1], Math.max(0, area.scrollHeight - area.clientHeight));

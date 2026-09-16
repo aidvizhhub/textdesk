@@ -34,6 +34,10 @@ def free_port():
     return port
 
 
+def book_counter(pg):
+    return pg.evaluate("document.getElementById('bookpage').value + ' / ' + document.getElementById('booktotal').textContent")
+
+
 def wait_port(port, timeout=10):
     t0 = time.time()
     while time.time() - t0 < timeout:
@@ -212,7 +216,7 @@ try:
         check('книга: кнопка показывает режим',
               page.eval_on_selector('#bookbtn', 'el => el.classList.contains("on") && el.getAttribute("aria-pressed") === "true"'))
         page.wait_for_timeout(400)
-        num1 = page.eval_on_selector('#booknum', 'el => el.textContent')
+        num1 = book_counter(page)
         check('книга: счётчик 1 / N', num1.startswith('1 / ') and int(num1.split(' / ')[1]) > 1, num1)
         aligned = page.evaluate("""(() => {
           const t = document.getElementById('t');
@@ -235,11 +239,11 @@ try:
         page.mouse.move(450, 220)
         page.mouse.wheel(0, 400)
         page.wait_for_timeout(200)
-        numw = page.eval_on_selector('#booknum', 'el => el.textContent')
+        numw = book_counter(page)
         check('книга: колесо не листает и не скроллит', numw.startswith('1 / '), numw)
         page.click('#bookr')
         page.wait_for_timeout(80)
-        num2 = page.eval_on_selector('#booknum', 'el => el.textContent')
+        num2 = book_counter(page)
         instant = page.evaluate("""(() => {
           const t = document.getElementById('t');
           return Math.abs(t.scrollTop - bookTarget()) < 1;
@@ -254,11 +258,22 @@ try:
         check('книга: свободный скролл не пробивает страницу', bool(snapped))
         page.click('#bookl')
         page.wait_for_timeout(400)
-        num3 = page.eval_on_selector('#booknum', 'el => el.textContent')
+        num3 = book_counter(page)
         check('книга: влево возвращает', num3.startswith('1 / '), num3)
+
+        page.fill('#bookpage', '3')
+        page.press('#bookpage', 'Enter')
+        page.wait_for_timeout(250)
+        num5 = book_counter(page)
+        check('книга: ввод номера страницы', num5.startswith('3 / '), num5)
+        page.fill('#bookpage', '1')
+        page.press('#bookpage', 'Enter')
+        page.wait_for_timeout(250)
+        num6 = book_counter(page)
+        check('книга: возврат на первую', num6.startswith('1 / '), num6)
         page.keyboard.press('ArrowRight')
         page.wait_for_timeout(400)
-        num4 = page.eval_on_selector('#booknum', 'el => el.textContent')
+        num4 = book_counter(page)
         check('книга: стрелка вправо листает', num4.startswith('2 / '), num4)
         page.click('#bookbtn')
         check('книга: режим выключается',
