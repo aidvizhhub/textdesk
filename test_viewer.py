@@ -313,6 +313,15 @@ def hello(name: str) -> str:
         page.wait_for_timeout(250)
         clipped = page.evaluate("(() => { const l = document.getElementById('back').children[0]; const r = document.createRange(); r.selectNodeContents(l); return Math.max(...Array.from(r.getClientRects()).map(q => q.width)) > document.querySelector('.editor').clientWidth; })()")
         check('перенос выкл: длинная строка вылезает за колонку', bool(clipped))
+        mask = page.evaluate("""(() => {
+          const back = document.getElementById('back');
+          const a = getComputedStyle(back, '::after');
+          const b = getComputedStyle(back.children[0], '::before');
+          return {content: a.content, width: a.width, bg: a.backgroundColor, transform: a.transform, numZ: b.zIndex};
+        })()""")
+        check('перенос выкл: гаттер закрыт маской, номера поверх неё',
+              mask['content'] not in ('none', 'normal', '') and 'rgba(0, 0, 0, 0)' not in mask['bg']
+              and mask['transform'].startswith('matrix') and mask['numZ'] == '1', str(mask))
         page.click('#bookbtn')
         page.wait_for_function("document.body.classList.contains('book')")
         page.wait_for_timeout(400)
