@@ -474,9 +474,12 @@ let serverMode = false;
 let serverTarget = null;
 let readonlyPath = null;
 let rootPath = '';
+let loadError = '';
+let loadToken = 0;
 
 function canWrite(){ return !!serverTarget; }
 function targetText(){
+  if(loadError) return loadError;
   if(readonlyPath) return 'только чтение: ' + readonlyPath;
   if(serverTarget) return 'цель записи: ' + (rootPath ? rootPath + '/' + serverTarget : serverTarget + ' (сервер)');
   if(serverMode) return 'цель записи: не выбрана — открой файл кнопкой';
@@ -534,6 +537,7 @@ function updateViewBtn(){
 }
 viewbtn.addEventListener('click', () => setPreview(!document.body.classList.contains('preview')));
 function loadText(text, name){
+  loadToken++;
   curName = name || '';
   const auto = st.wrap === undefined;
   applyWrap(auto ? autoWrap(text, curName) : !!st.wrap, auto || bookActive());
@@ -855,20 +859,25 @@ fileInput.addEventListener('change', async () => {
 
 function openServerFile(rel){
   if(!rel) return;
+  const token = loadToken;
   serverTarget = rel;
   setDirty(dirty);
   fetch('/' + rel).then(r => {
     if(!r.ok) throw new Error(r.status);
     return r.text();
   }).then(txt => {
+    if(token !== loadToken) return;      // пока грузилось, выбрали другой файл — этот ответ устарел
     readonlyPath = null;
+    loadError = '';
     st.file = rel;
     st.navdir = rel.indexOf('/') >= 0 ? rel.replace(/\/[^/]*$/, '') : '';
     save();
     loadText(txt, rel.split('/').pop());
-  }).catch(() => {
+  }).catch(e => {
+    if(token !== loadToken) return;
     serverTarget = null;
-    cnt.textContent = 'не прочитал: ' + rel;
+    loadError = (String(e.message) === '404' ? 'не нашёл: ' : 'не прочитал: ') + rel;
+    loadText('', rel.split('/').pop());
     setDirty(dirty);
   });
 }
@@ -891,6 +900,8 @@ async function initServer(){
     serverFiles.push(...files);
     if(serverTarget){
       // уже открывается по ?file= или старой памяти
+    } else if(fileParam){
+      // ?file= главнее памяти: его поток загрузки сам разберётся (в том числе с ошибкой)
     } else if(st.file && files.indexOf(st.file) !== -1){
       openServerFile(st.file);
     } else {

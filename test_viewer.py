@@ -272,6 +272,7 @@ def hello(name: str) -> str:
 [опасная](javascript:window.__xss=2)
 ''', encoding='utf-8')
         (root / 'tool.diff').write_text('--- a\n+++ b\n-старая строка\n+новая строка\n общая\n', encoding='utf-8')
+        (root / 'empty.md').write_text('', encoding='utf-8')
         page.goto(base + '?file=longline.txt')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.getElementById('t').value.length > 0")
@@ -484,6 +485,20 @@ def hello(name: str) -> str:
         page.wait_for_timeout(300)
         check('кнопка просмотра есть только у md',
               page.evaluate("!document.getElementById('viewbtn').hidden"), 'notes.md')
+
+        page.goto(base + '?file=no-such-file-xyz.md')
+        page.wait_for_timeout(1200)
+        miss = page.evaluate("""() => ({target: document.getElementById('target').textContent,
+                                       fname: document.getElementById('fname').textContent,
+                                       len: document.getElementById('t').value.length})""")
+        check('ненайденный файл говорит об этом, а не молчит пустым полем',
+              'не нашёл' in miss['target'] and miss['fname'] == 'no-such-file-xyz.md', str(miss))
+        page.goto(base + '?file=empty.md')
+        page.wait_for_timeout(1000)
+        emp = page.evaluate("""() => ({target: document.getElementById('target').textContent,
+                                      len: document.getElementById('t').value.length,
+                                      cnt: document.getElementById('cnt').textContent})""")
+        check('пустой файл открывается как пустой и без ошибки', emp['len'] == 0 and 'не нашёл' not in emp['target'], str(emp))
         page.goto(base + '?file=big.py')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.querySelector('#back .ln .hljs-number') !== null")
