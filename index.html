@@ -23,11 +23,11 @@ try {
   scrollbar-color:#454d57 transparent;
 }
 html.light{
-  --bg:#f7f6f3; --panel:#fffefb; --fg:#20252b; --dim:#6a737d; --line:#e4e0d8;
-  --btn:#efede7; --btnfg:#333a42; --acc:#9a6b00;
-  --tok-kw:#7c3aed; --tok-str:#116329; --tok-com:#8a929b; --tok-num:#b45309; --tok-fn:#0b62a4; --tok-type:#0f766e; --tok-del:#b42318; --sel:rgba(154,107,0,.22); --sel:rgba(154,107,0,.18);
+  --bg:#f4efe6; --panel:#faf6ee; --fg:#4a443c; --dim:#6f6759; --line:#e0d8c9;
+  --btn:#ebe4d7; --btnfg:#4a443c; --acc:#8a5f12;
+  --tok-kw:#8c4a72; --tok-str:#5f6f2a; --tok-com:#6f6759; --tok-num:#8a5a1e; --tok-fn:#3f5f86; --tok-type:#2f6b63; --tok-del:#a03c32; --sel:rgba(138,95,18,.18); --sel:rgba(138,95,18,.14);
   color-scheme:light;
-  scrollbar-color:#d7d9d6 transparent;
+  scrollbar-color:#d8cfc0 transparent;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -45,7 +45,7 @@ button:disabled{opacity:.4;cursor:default}
 button:disabled:hover{background:none}
 .on,#cp.ok{background:color-mix(in srgb, var(--acc) 16%, transparent);color:var(--acc)}
 .on:hover,#cp.ok:hover{background:color-mix(in srgb, var(--acc) 26%, transparent)}
-#save.dirty{background:var(--acc);color:#20252b}
+#save.dirty{background:var(--acc);color:var(--bg)}
 #save.dirty:hover{background:color-mix(in srgb, var(--acc) 84%, #fff)}
 .ic{width:1.05em;height:1.05em;display:block;flex:none}
 #fsval{min-width:48px;text-align:center;color:var(--dim)}
