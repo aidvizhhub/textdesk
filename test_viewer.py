@@ -367,6 +367,29 @@ try:
         check('file:// тема переключается', body_bg(page) != bg_file)
 
         browser.close()
+
+    # статичный хостинг без нашего сервера: показываем вшитый демо-текст
+    plain_port = free_port()
+    plain = subprocess.Popen([sys.executable, '-m', 'http.server', str(plain_port), '--bind', '127.0.0.1', '--directory', str(HERE)],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        time.sleep(1)
+        with sync_playwright() as p2:
+            b2 = p2.chromium.launch(channel='chrome', headless=True)
+            sp = b2.new_page()
+            sp.goto('http://127.0.0.1:%d/' % plain_port)
+            sp.wait_for_load_state('networkidle')
+            sp.wait_for_function("document.getElementById('t').value.length > 0", timeout=10000)
+            check('без сервера: показывается вшитый демо-текст',
+                  sp.eval_on_selector('#t', 'el => el.value.length') > 10 and not sp.is_visible('#navbtn'),
+                  'len=%d' % sp.eval_on_selector('#t', 'el => el.value.length'))
+            b2.close()
+    finally:
+        plain.terminate()
+        try:
+            plain.wait(timeout=5)
+        except Exception:
+            plain.kill()
 except Exception:
     try:
         page.screenshot(path='/tmp/opencode/viewer_test_fail.png')
