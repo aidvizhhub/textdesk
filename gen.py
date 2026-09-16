@@ -215,8 +215,9 @@ const httpMode = /^https?:$/.test(location.protocol);
 
 function upd(){
   const v = area.value;
-  const line = v.slice(0, area.selectionStart).split('\n').length;
-  pos.textContent = 'строка ' + line + ' / ' + v.split('\n').length;
+  const total = v.split('\n').length;
+  const line = bookActive() ? lineAtY(area.scrollTop) + 1 : v.slice(0, area.selectionStart).split('\n').length;
+  pos.textContent = 'строка ' + line + ' / ' + total;
   cnt.textContent = v.length + ' символов';
 }
 ['input','keyup','click','select','focus'].forEach(ev => area.addEventListener(ev, upd));
@@ -851,6 +852,7 @@ function bookShow(){
   root.style.setProperty('--book-h', (bookRowsPx() + 2 * bookPadY() + 2) + 'px');
   area.scrollTop = bookTarget();
   syncScroll();
+  upd();
   bookUpdate();
 }
 function bookFit(){
@@ -898,6 +900,7 @@ area.addEventListener('scroll', () => {
   if(!bookActive()) return;
   const target = bookTarget();
   if(Math.abs(area.scrollTop - target) > 0.5) area.scrollTop = target;
+  upd();
   bookUpdate();
 });
 window.addEventListener('keydown', e => {

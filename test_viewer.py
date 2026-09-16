@@ -344,6 +344,8 @@ try:
         page.wait_for_timeout(250)
         num5 = book_counter(page)
         check('книга: ввод номера страницы', num5.startswith('3 / '), num5)
+        pos3 = page.eval_on_selector('#pos', 'el => el.textContent')
+        check('книга: в статусе строка с текущей страницы, а не каретка', pos3.startswith('строка ') and int(pos3.split()[1]) > 1, pos3)
         page.fill('#bookpage', '1')
         page.press('#bookpage', 'Enter')
         page.wait_for_timeout(250)
