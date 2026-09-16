@@ -237,6 +237,7 @@ try:
         longline = root / 'longline.txt'
         longline.write_text('x' * 4000 + '\nвторая строка\n', encoding='utf-8')
         (root / 'wide.py').write_text(('x = "' + 'y' * 500 + '"\n') * 60, encoding='utf-8')
+        (root / 'bundle.min.js').write_text('var a=' + '"x",' * 1200 + '"z";\n', encoding='utf-8')
         page.goto(base + '?file=longline.txt')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.getElementById('t').value.length > 0")
@@ -344,6 +345,25 @@ try:
         check('перенос выкл на длинном файле: textarea не переносит — высоты сходятся, скролл вбок есть',
               abs(w['taH'] - w['backH']) <= 4 and w['taW'] > w['cliW'] + 100, str(w))
         check('перенос выкл на длинном файле: конец текста достижим и виден', w['виден_конец'], str(w))
+
+        page.evaluate("localStorage.removeItem('txtviewer')")
+        page.goto(base + '?file=big.py')
+        page.wait_for_function("document.getElementById('t').value.length > 0")
+        page.wait_for_timeout(300)
+        check('авто-перенос: обычный код открывается без переноса',
+              page.evaluate("document.body.classList.contains('nowrap')"))
+        page.goto(base + '?file=bundle.min.js')
+        page.wait_for_function("document.getElementById('t').value.length > 0")
+        page.wait_for_timeout(300)
+        check('авто-перенос: минифицированная строка открывается с переносом',
+              page.evaluate("!document.body.classList.contains('nowrap')"))
+        page.click('#wrapbtn')
+        page.wait_for_timeout(300)
+        page.goto(base + '?file=bundle.min.js')
+        page.wait_for_function("document.getElementById('t').value.length > 0")
+        page.wait_for_timeout(300)
+        check('авто-перенос: выбор пользователя сильнее эвристики',
+              page.evaluate("document.body.classList.contains('nowrap')"))
         page.goto(base + '?file=big.py')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.querySelector('#back .ln .hljs-number') !== null")

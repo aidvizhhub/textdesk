@@ -259,6 +259,16 @@ function isCodeName(name){
   const m = /\.([A-Za-z0-9]+)$/.exec((name || '').split('/').pop());
   return !!(m && HL_LANGS[m[1].toLowerCase()]);
 }
+function autoWrap(text, name){
+  if(!isCodeName(name)) return true;
+  let max = 0, cur = 0;
+  for(let i = 0; i < text.length; i++){
+    if(text.charCodeAt(i) === 10){ if(cur > max) max = cur; cur = 0; }
+    else cur++;
+  }
+  if(cur > max) max = cur;
+  return max > 2000;      // минифицированная простыня: без переноса её вбок листать бессмысленно
+}
 function applyWrap(on, keep){
   if(bookActive()) on = true;
   if(!keep){
@@ -462,7 +472,8 @@ function setDirty(v){
 
 function loadText(text, name){
   curName = name || '';
-  applyWrap(st.wrap === undefined ? !isCodeName(curName) : !!st.wrap, bookActive());
+  const auto = st.wrap === undefined;
+  applyWrap(auto ? autoWrap(text, curName) : !!st.wrap, auto || bookActive());
   area.value = text;
   area.setSelectionRange(0, 0);
   area.scrollTop = 0;
