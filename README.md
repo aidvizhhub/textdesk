@@ -3,7 +3,9 @@
 локальный веб-просмотрщик и редактор текстовых файлов. открываешь в браузере, правишь, `Ctrl+S` — правки уходят прямо в файл на диске. снаружи корня сервера — только чтение.
 
 ![редактор](docs/editor.png)
+![просмотр markdown](docs/preview.png)
 ![режим книги](docs/book.png)
+![поиск](docs/search.png)
 
 ## что умеет
 - подсветка кода на highlight.js: ~140 языков, дев-файлы (Dockerfile, Makefile, .env, .gitignore и др.)
@@ -63,4 +65,4 @@ MIT. сторонние компоненты — [THIRD_PARTY.md](THIRD_PARTY.md
 
 # textdesk (EN)
 
-A tiny local web text/code viewer and editor. Run `python3 serve.py`, open `http://127.0.0.1:8792/`, edit files in the browser; `Ctrl+S` writes them to disk. Only text files inside the server root are writable — everything outside the root is read-only. Code highlighting via vendored highlight.js, a book mode with instant page flips, light/dark themes. MIT license.
+A tiny local web text/code viewer and editor. Run `python3 serve.py`, open `http://127.0.0.1:8792/`, edit files in the browser; `Ctrl+S` writes them to disk. Only text files inside the server root are writable — everything outside the root is read-only. Code highlighting via vendored highlight.js, a book mode with instant page flips (pages never cut lines), a rendered markdown preview via vendored markdown-it (raw HTML is not executed), search inside a file (`Ctrl+F`, `F3`, `Aa`) and across the whole root (field in the file navigator, jumps to the line), light/dark themes. MIT license.
