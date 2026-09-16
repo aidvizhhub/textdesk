@@ -217,7 +217,7 @@ body.book #wrapbtn{display:none}
 <button id="bookr" title="вперёд" tabindex="-1">&#8250;</button>
 <div id="nav" hidden>
   <div id="navpanel">
-    <div id="navpath"><input id="pathin" type="text" spellcheck="false" placeholder="путь к файлу или папке…"><input id="navgrep" type="text" spellcheck="false" placeholder="поиск по корню, min 2 символа… (Enter)"></div>
+    <div id="navpath"><input id="pathin" type="text" spellcheck="false" placeholder="путь к файлу или папке…"><input id="navgrep" type="text" spellcheck="false" title="поиск по всем файлам корня (Ctrl+Shift+F)" placeholder="поиск по корню, min 2 символа… (Enter)"></div>
     <div id="navcrumbs"></div>
     <div id="navlist"></div>
   </div>
@@ -912,6 +912,8 @@ window.addEventListener('keydown', e => {
     return;
   }
   if(nav.hidden) return;
+  const inField = e.target && e.target.tagName === 'INPUT';
+  if(inField && e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Escape') return;
   const items = navFiltered();
   if(e.key === 'Escape'){ e.preventDefault(); navClose(); }
   else if(e.key === 'ArrowDown'){ e.preventDefault(); navSel = Math.min(items.length - 1, navSel + 1); renderNav(); }
@@ -1232,7 +1234,14 @@ findcase.addEventListener('click', () => {
   if(findin.value) findRun(false);
 });
 window.addEventListener('keydown', e => {
-  if((e.ctrlKey || e.metaKey) && 'fFаА'.indexOf(e.key) !== -1){
+  if((e.ctrlKey || e.metaKey) && e.shiftKey && 'fFаА'.indexOf(e.key) !== -1){
+    e.preventDefault();
+    if(nav.hidden) openNav(navDir);
+    navgrep.focus();
+    navgrep.select();
+    return;
+  }
+  if((e.ctrlKey || e.metaKey) && !e.shiftKey && 'fFаА'.indexOf(e.key) !== -1){
     e.preventDefault();
     findOpen(true);
     return;

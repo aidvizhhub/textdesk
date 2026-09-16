@@ -586,6 +586,9 @@ def hello(name: str) -> str:
         hits = page.eval_on_selector_all('#navlist .navitem', 'els => els.map(e => e.textContent)')
         check('поиск по корню: список показывает совпадения из разных файлов',
               any('search.txt:' in h for h in hits) and any('search2.txt:' in h for h in hits), str(hits))
+        check('поиск по корню: надпись фильтра дерева не липнет к поиску',
+              'фильтр' not in page.eval_on_selector('#navcrumbs', 'el => el.textContent'),
+              page.eval_on_selector('#navcrumbs', 'el => el.textContent'))
         page.click('#navlist .navitem:has(.hittext)')
         page.wait_for_function("document.getElementById('fname').textContent === 'search.txt'")
         page.wait_for_timeout(400)
@@ -597,6 +600,22 @@ def hello(name: str) -> str:
                                       top: document.getElementById('t').scrollTop})""")
         check('поиск по корню: клик открывает файл, ищет в нём и встаёт на строку',
               gh['find'] and gh['val'] == 'marker' and gh['cnt'] == '1 / 1' and gh['cur'] == 1 and gh['line'] - gh['top'] >= 0, str(gh))
+        page.keyboard.press('Escape')
+        page.wait_for_timeout(200)
+        page.keyboard.press('Control+Shift+F')
+        page.wait_for_selector('#nav:not([hidden])')
+        page.wait_for_timeout(300)
+        gf = page.evaluate("""() => ({focus: document.activeElement && document.activeElement.id,
+                                      crumbs: document.querySelector('#navcrumbs').textContent})""")
+        check('Ctrl+Shift+F открывает обзор и ставит курсор в поиск по корню',
+              gf['focus'] == 'navgrep' and 'фильтр' not in gf['crumbs'], str(gf))
+        page.keyboard.type('marker')
+        page.wait_for_timeout(250)
+        check('набор в поле поиска не уходит в фильтр дерева',
+              page.eval_on_selector('#navgrep', 'el => el.value') == 'marker'
+              and 'фильтр' not in page.eval_on_selector('#navcrumbs', 'el => el.textContent'),
+              page.eval_on_selector('#navcrumbs', 'el => el.textContent'))
+        page.keyboard.press('Escape')
         page.goto(base + '?file=big.py')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.querySelector('#back .ln .hljs-number') !== null")
