@@ -78,6 +78,7 @@ main{flex:1;display:flex;width:100%;padding:1.2rem clamp(1rem,4vw,2.6rem) 1.4rem
 #backw{position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;pointer-events:none}
 body.nowrap #back{white-space:pre}
 body.nowrap #back .ln{white-space:pre}
+body.nowrap textarea{white-space:pre}
 #back .ln{position:relative;padding-left:calc(var(--gut) + 1.6rem);counter-increment:line;min-height:1lh}
 #back .ln::before{content:counter(line);position:absolute;left:0;width:calc(var(--gutw) + .2rem);white-space:nowrap;text-align:right;color:var(--dim);font-size:.8rem;transform:translateX(calc(-1 * var(--sx,0px)))}
 textarea{flex:1;width:100%;min-height:0;background:transparent;border:0;padding:0 0 0 calc(var(--gut) + 1.6rem);outline:none;resize:none;color:transparent;caret-color:var(--fg);font:inherit;white-space:pre-wrap;overflow-wrap:break-word;position:relative;z-index:1;overflow:auto}

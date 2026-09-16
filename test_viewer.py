@@ -236,6 +236,7 @@ try:
         big.write_text('value = 123\n' * 4000, encoding='utf-8')
         longline = root / 'longline.txt'
         longline.write_text('x' * 4000 + '\nвторая строка\n', encoding='utf-8')
+        (root / 'wide.py').write_text(('x = "' + 'y' * 500 + '"\n') * 60, encoding='utf-8')
         page.goto(base + '?file=longline.txt')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.getElementById('t').value.length > 0")
@@ -246,6 +247,22 @@ try:
         check('перенос выключается: длинная строка = одна', rows_wrap > 3 and rows_nowrap == 1,
               'было %d строк, стало %d' % (rows_wrap, rows_nowrap))
         check('перенос: wrap=off и класс nowrap', page.evaluate("document.getElementById('t').getAttribute('wrap') === 'off' && document.body.classList.contains('nowrap')"))
+        clip = page.evaluate("""(() => {
+          const t = document.getElementById('t'), b = document.getElementById('back');
+          t.scrollTop = t.scrollHeight;
+          t.scrollLeft = t.scrollWidth;
+          const last = b.children[b.children.length - 1];
+          const backH = last.offsetTop + last.offsetHeight;
+          const res = {taH: t.scrollHeight, backH: backH, cliH: t.clientHeight, taW: t.scrollWidth, cliW: t.clientWidth,
+                       st: Math.round(t.scrollTop), sl: Math.round(t.scrollLeft),
+                       виден_конец: last.offsetTop + last.offsetHeight <= t.scrollTop + t.clientHeight + 1};
+          t.scrollTop = 0;
+          t.scrollLeft = 0;
+          return res;
+        })()""")
+        check('перенос выкл: textarea тоже не переносит — высоты сходятся, есть скролл вбок',
+              abs(clip['taH'] - max(clip['backH'], clip['cliH'])) <= 4 and clip['taW'] > clip['cliW'] + 100, str(clip))
+        check('перенос выкл: докрутив вниз-вправо, видно конец текста', clip['виден_конец'], str(clip))
         page.click('#wrapbtn')
         page.wait_for_timeout(300)
         check('перенос включается обратно', page.evaluate("document.getElementById('t').getAttribute('wrap') === 'soft' && !document.body.classList.contains('nowrap')"))
@@ -307,6 +324,26 @@ try:
         page.click('#wrapbtn')
         page.wait_for_timeout(200)
 
+        page.goto(base + '?file=wide.py')
+        page.wait_for_function("document.getElementById('t').value.length > 0")
+        page.wait_for_timeout(300)
+        if not page.evaluate("document.body.classList.contains('nowrap')"):
+            page.click('#wrapbtn')
+            page.wait_for_timeout(300)
+        w = page.evaluate("""(() => {
+          const t = document.getElementById('t'), b = document.getElementById('back');
+          const last = b.children[b.children.length - 1];
+          const backH = last.offsetTop + last.offsetHeight;
+          t.scrollTop = t.scrollHeight;
+          const res = {taH: t.scrollHeight, backH: backH, cliH: t.clientHeight, taW: t.scrollWidth, cliW: t.clientWidth,
+                       виден_конец: last.offsetTop + last.offsetHeight <= t.scrollTop + t.clientHeight + 1};
+          t.scrollTop = 0;
+          t.scrollLeft = 0;
+          return res;
+        })()""")
+        check('перенос выкл на длинном файле: textarea не переносит — высоты сходятся, скролл вбок есть',
+              abs(w['taH'] - w['backH']) <= 4 and w['taW'] > w['cliW'] + 100, str(w))
+        check('перенос выкл на длинном файле: конец текста достижим и виден', w['виден_конец'], str(w))
         page.goto(base + '?file=big.py')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.querySelector('#back .ln .hljs-number') !== null")
