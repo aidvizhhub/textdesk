@@ -234,7 +234,7 @@ try:
         check('книга: карточка не выше окна (строка длиннее страницы не раздувает карточку)',
               cardfit[0] <= cardfit[1] + 1, str(cardfit))
         pages_n = page.evaluate("bookPages()")
-        check('книга: строка длиннее страницы листается куском с полными строками экрана', pages_n > 1, str(pages_n))
+        check('книга: страницы идут фиксированным шагом (монстр-строка не раздувает карточку)', pages_n > 1, str(pages_n))
         fits = page.evaluate("(() => { const l = document.getElementById('back').children[0]; return l.scrollWidth <= l.clientWidth + 1; })()")
         check('книга: длинная строка не обрезается по правому краю', bool(fits))
         hang = page.evaluate("""(() => {
@@ -256,15 +256,14 @@ try:
         check('книга: текст холста не выше textarea (иначе последняя страница режется)', hs[0] <= hs[1], 'холст %d, textarea %d' % tuple(hs))
         page.evaluate("bookGoto(bookPages())")
         page.wait_for_timeout(250)
-        lastok = page.evaluate("""(() => {
-          const t = document.getElementById('t'), b = document.getElementById('back');
-          const st = t.scrollTop, vh = t.clientHeight;
-          return Array.from(b.querySelectorAll('.ln')).every(l =>
-            !(l.offsetTop < st + vh - 1 && l.offsetTop + l.offsetHeight > st + 1) ||
-            l.offsetHeight > vh + 1 ||
-            (l.offsetTop >= st - 1 && l.offsetTop + l.offsetHeight <= st + vh + 1));
+        tail = page.evaluate("""(() => {
+          const t = document.getElementById('t');
+          const lns = document.querySelectorAll('#back .ln');
+          const l = lns[lns.length - 1];
+          const bottom = l.offsetTop + l.offsetHeight;
+          return {в_странице: bottom <= t.scrollTop + t.clientHeight + 1, ниже_верха: bottom > t.scrollTop};
         })()""")
-        check('книга: последняя страница не режет строки', bool(lastok))
+        check('книга: последняя страница показывает конец текста', tail['в_странице'] and tail['ниже_верха'], str(tail))
         page.click('#bookbtn')
         page.wait_for_function("!document.body.classList.contains('book')")
         page.wait_for_timeout(300)
@@ -292,23 +291,23 @@ try:
         page.wait_for_timeout(400)
         num1 = book_counter(page)
         check('книга: счётчик 1 / N', num1.startswith('1 / ') and int(num1.split(' / ')[1]) > 1, num1)
-        aligned = page.evaluate("""(() => {
-          const t = document.getElementById('t');
-          const st = Math.round(t.scrollTop);
+        h1 = page.evaluate("Math.round(document.querySelector('.editor').getBoundingClientRect().height)")
+        page.click('#bookr')
+        page.wait_for_timeout(120)
+        h2 = page.evaluate("Math.round(document.querySelector('.editor').getBoundingClientRect().height)")
+        page.click('#bookl')
+        page.wait_for_timeout(120)
+        check('книга: карточка одной высоты на всех страницах', h1 == h2, '%d vs %d' % (h1, h2))
+        grid = page.evaluate("""(() => {
           const lns = Array.from(document.querySelectorAll('#back .ln'));
-          let atLineStart = false;
-          for(const el of lns){
-            const top = Math.round(el.offsetTop);
-            if(top >= st - 1){ atLineStart = Math.abs(top - st) <= 1; break; }
-          }
-          const cut = lns.some(el => {
-            const top = el.offsetTop, bot = top + el.offsetHeight;
-            return (top > st + 1) && (top < st + t.clientHeight - 1) && (bot > st + t.clientHeight + 1);
-          });
+          const pitch = Math.min.apply(null, lns.map(l => l.offsetHeight).filter(h => h > 0));
+          const offTop = lns.filter(l => Math.abs((l.offsetTop / pitch) % 1) * pitch >= 0.5).length;
+          const offH = lns.filter(l => Math.abs((l.offsetHeight / pitch) % 1) * pitch >= 0.5).length;
           const card = getComputedStyle(document.querySelector('.editor')).boxShadow !== 'none';
-          return atLineStart && !cut && card;
+          return {pitch: pitch, tops: offTop, heights: offH, card: card};
         })()""")
-        check('книга: страница-карточка со строки и без обрезанных строк', bool(aligned))
+        check('книга: все строки по сетке одной высоты (границы страниц не режут строки)',
+              grid['tops'] == 0 and grid['heights'] == 0 and grid['card'], str(grid))
         sep = page.evaluate("""(() => {
           const cs = getComputedStyle(document.querySelector('.editor'), '::before');
           return cs.width + '|' + cs.backgroundColor;

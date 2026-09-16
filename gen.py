@@ -35,6 +35,7 @@ try {
   --tok-kw:#c792ea; --tok-str:#95d18f; --tok-com:#6b7683; --tok-num:#ffb86c; --tok-fn:#82aaff; --tok-type:#7fd1e0; --sel:rgba(255,212,59,.30); --sel:rgba(255,212,59,.26);
   --gut:calc(4ch + 1.7rem);
   --bpy:24px; --bpx:34px;
+  --book-lh-ratio:1.75;
   color-scheme:dark;
   scrollbar-color:#454d57 transparent;
 }
@@ -77,7 +78,7 @@ main{flex:1;display:flex;width:100%;padding:1.2rem clamp(1rem,4vw,2.6rem) 1.4rem
 #backw{position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;pointer-events:none}
 body.nowrap #back{white-space:pre}
 body.nowrap #back .ln{white-space:pre}
-#back .ln{position:relative;padding-left:calc(var(--gut) + 1.6rem);counter-increment:line;min-height:1.6em}
+#back .ln{position:relative;padding-left:calc(var(--gut) + 1.6rem);counter-increment:line;min-height:1lh}
 #back .ln::before{content:counter(line);position:absolute;left:0;width:calc(var(--gutw) + .2rem);white-space:nowrap;text-align:right;color:var(--dim);font-size:.8rem;transform:translateX(calc(-1 * var(--sx,0px)))}
 textarea{flex:1;width:100%;min-height:0;background:transparent;border:0;padding:0 0 0 calc(var(--gut) + 1.6rem);outline:none;resize:none;color:transparent;caret-color:var(--fg);font:inherit;white-space:pre-wrap;overflow-wrap:break-word;position:relative;z-index:1;overflow:auto}
 textarea::-webkit-scrollbar{width:.55rem;height:.55rem}
@@ -116,7 +117,7 @@ body.book #bookl,body.book #bookr{display:flex}
 #bookpage{width:3.6ch;background:transparent;border:0;border-bottom:1px solid transparent;color:var(--acc);font:inherit;font-size:inherit;text-align:right;outline:none;padding:0}
 #bookpage:focus{border-bottom-color:var(--acc)}
 body.book main{align-items:center;background:color-mix(in srgb, var(--fg) 6%, var(--bg))}
-body.book .editor{flex:none;width:min(78ch,100%);height:var(--book-h,60vh);margin:0 auto;line-height:1.75;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.30)}
+body.book .editor{flex:none;width:min(78ch,100%);height:var(--book-h,60vh);margin:0 auto;line-height:var(--book-lhp,var(--book-lh-ratio));background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.30)}
 body.book #backw{left:var(--bpx);top:var(--bpy);right:var(--bpx);bottom:var(--bpy)}
 body.book #back{left:0;top:0;width:calc(100% + 2ch) !important}
 body.book #back .ln{padding-left:calc(var(--gut) + 1.6rem + 2ch);text-indent:-2ch}
@@ -249,7 +250,7 @@ function buildBack(){
   syncScroll();
   upd();
   highlightView();
-  if(bookActive()){ bookLayout(); bookShow(); }
+  if(bookActive()) bookApply(false);
 }
 const wrapbtn = document.getElementById('wrapbtn');
 function isCodeName(name){
@@ -813,7 +814,7 @@ async function initServer(){
     } else {
       loadText('', '');
     }
-    if(bookActive()) bookLayout();
+    if(bookActive()) bookApply(false);
     setDirty(dirty);
   } catch(e){ demoFallback(); }
 }
@@ -827,46 +828,15 @@ const booknum = document.getElementById('booknum');
 let bookRowsN = 10;
 let bookPageN = 1;
 let bookWrapWas = true;
-function bookLineH(){ return parseFloat(getComputedStyle(area).lineHeight) || 20; }
+function bookLineH(){ return Math.max(8, Math.round(parseFloat(getComputedStyle(area).lineHeight) || 20)); }
 function bookActive(){ return document.body.classList.contains('book'); }
-function bookPageH(){ return bookRowsN * bookLineH(); }
-let bookStarts = [0];
-let bookHeights = [0];
+function bookRowsPx(){ return bookRowsN * bookLineH(); }
 function bookPadY(){ return parseFloat(getComputedStyle(root).getPropertyValue('--bpy')) || 20; }
-function bookLayout(){
-  const rowsPx = bookPageH();
-  const lns = back.children, n = lns.length;
-  const starts = [], heights = [];
-  let i = 0, st = 0;
-  while(i < n){
-    const limit = st + rowsPx;
-    let j = i, h = 0;
-    while(j < n && lns[j].offsetTop + lns[j].offsetHeight <= limit + 0.5){
-      h = lns[j].offsetTop + lns[j].offsetHeight - st;
-      j++;
-    }
-    if(j > i && j < n && lns[j].offsetHeight > rowsPx + 0.5 && lns[j].offsetTop < limit){
-      starts.push(st);                 // к целым строкам подклеиваем кусок строки-монстра,
-      heights.push(rowsPx);            // иначе карточка остаётся недобитой
-      st = limit;
-      i = j;
-      continue;
-    }
-    if(j > i){
-      starts.push(st);
-      heights.push(h);
-      st += h;
-      i = j;
-      continue;
-    }
-    starts.push(st);                   // строка сама длиннее страницы: кусок во всю страницу
-    heights.push(rowsPx);
-    st = limit;
-  }
-  bookStarts = starts.length ? starts : [0];
-  bookHeights = heights.length ? heights : [bookPageH()];
+function bookContentH(){
+  const lns = back.children;
+  return lns.length ? lns[lns.length - 1].offsetTop + lns[lns.length - 1].offsetHeight : 0;
 }
-function bookPages(){ return Math.max(1, bookStarts.length); }
+function bookPages(){ return Math.max(1, Math.ceil(bookContentH() / bookRowsPx())); }
 function bookUpdate(){
   if(!bookActive()) return;
   document.getElementById('booktotal').textContent = bookPages();
@@ -874,25 +844,27 @@ function bookUpdate(){
   if(document.activeElement !== inp) inp.value = bookPageN;
 }
 function bookTarget(){
-  return Math.min(bookStarts[Math.min(bookPageN, bookPages()) - 1], Math.max(0, area.scrollHeight - area.clientHeight));
+  return Math.min((Math.min(bookPageN, bookPages()) - 1) * bookRowsPx(), Math.max(0, area.scrollHeight - area.clientHeight));
 }
 function bookShow(){
   bookPageN = Math.min(Math.max(1, bookPageN), bookPages());
-  const h = (bookHeights[bookPageN - 1] || bookPageH()) + 2 * bookPadY() + 2;
-  root.style.setProperty('--book-h', h + 'px');
+  root.style.setProperty('--book-h', (bookRowsPx() + 2 * bookPadY() + 2) + 'px');
   area.scrollTop = bookTarget();
   syncScroll();
   bookUpdate();
 }
-function bookApply(){
-  if(!bookActive()) return;
-  const lh = bookLineH();
-  const mainEl = document.querySelector('main');
+function bookFit(){
+  const ratio = parseFloat(getComputedStyle(root).getPropertyValue('--book-lh-ratio')) || 1.75;
+  const pitch = Math.max(8, Math.round(parseFloat(getComputedStyle(area).fontSize) * ratio));
+  root.style.setProperty('--book-lhp', pitch + 'px');
   const padY = bookPadY();
-  bookRowsN = Math.max(3, Math.floor((mainEl.clientHeight - 2 - 2 * padY) / lh));
-  scheduleBack();
-  bookLayout();
-  bookPageN = 1;
+  bookRowsN = Math.max(3, Math.floor((document.querySelector('main').clientHeight - 2 - 2 * padY) / pitch));
+}
+function bookApply(sched){
+  if(!bookActive()) return;
+  bookFit();
+  bookPageN = Math.floor(area.scrollTop / bookRowsPx()) + 1;
+  if(sched !== false) scheduleBack();
   bookShow();
 }
 function bookGoto(n){
