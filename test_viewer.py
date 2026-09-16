@@ -270,7 +270,7 @@ try:
 
         page.click('#wrapbtn')
         page.wait_for_timeout(250)
-        clipped = page.evaluate("(() => { const l = document.getElementById('back').children[0]; return l.scrollWidth > l.clientWidth + 1; })()")
+        clipped = page.evaluate("(() => { const l = document.getElementById('back').children[0]; const r = document.createRange(); r.selectNodeContents(l); return Math.max(...Array.from(r.getClientRects()).map(q => q.width)) > document.querySelector('.editor').clientWidth; })()")
         check('перенос выкл: длинная строка вылезает за колонку', bool(clipped))
         page.click('#bookbtn')
         page.wait_for_function("document.body.classList.contains('book')")
@@ -345,6 +345,16 @@ try:
         check('перенос выкл на длинном файле: textarea не переносит — высоты сходятся, скролл вбок есть',
               abs(w['taH'] - w['backH']) <= 4 and w['taW'] > w['cliW'] + 100, str(w))
         check('перенос выкл на длинном файле: конец текста достижим и виден', w['виден_конец'], str(w))
+        fx = page.evaluate("""(() => {
+          const t = document.getElementById('t'), b = document.getElementById('back'), ed = document.querySelector('.editor');
+          t.scrollLeft = 600;
+          const res = {edL: Math.round(ed.getBoundingClientRect().left), edR: Math.round(ed.getBoundingClientRect().right),
+                       backR: Math.round(b.getBoundingClientRect().right), backW: b.offsetWidth, taW: t.scrollWidth};
+          t.scrollLeft = 0;
+          return res;
+        })()""")
+        check('перенос выкл: холст шире прокрутки — при скролле вбок нет пустой полосы справа',
+              fx['backR'] >= fx['edR'] and fx['backW'] >= fx['taW'], str(fx))
 
         page.evaluate("localStorage.removeItem('txtviewer')")
         page.goto(base + '?file=big.py')

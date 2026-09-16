@@ -231,7 +231,7 @@ function buildBack(){
   }
   back.textContent = '';
   back.append(frag);
-  back.style.width = area.clientWidth + 'px';
+  back.style.width = (document.body.classList.contains('nowrap') ? area.scrollWidth : area.clientWidth) + 'px';
   syncScroll();
   upd();
   highlightView();
