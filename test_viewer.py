@@ -239,9 +239,11 @@ try:
         (root / 'wide.py').write_text(('x = "' + 'y' * 500 + '"\n') * 60, encoding='utf-8')
         (root / 'bundle.min.js').write_text('var a=' + '"x",' * 1200 + '"z";\n', encoding='utf-8')
         (root / 'notes.md').write_text('# Заголовок\n\n**жирный** и *курсив* и `код` и [ссылка](https://example.com)\n\n- пункт раз\n- пункт два\n', encoding='utf-8')
-        (root / 'canon.md').write_text('''# Заголовок первый
+        (root / '11' / 'canon.md').write_text('''# Заголовок первый
 
 Абзац с **жирным**, *курсивом*, `инлайн-кодом` и [ссылкой](https://example.com/page).
+
+![схема](pic.png)
 
 ## Список
 
@@ -435,7 +437,7 @@ def hello(name: str) -> str:
         })()""")
         check('diff: добавление и удаление разного цвета', bool(df['add']) and bool(df['del']) and df['add'] != df['del'], str(df))
 
-        page.goto(base + '?file=canon.md')
+        page.goto(base + '?file=11/canon.md')
         page.wait_for_function("!document.getElementById('viewbtn').hidden")
         page.wait_for_timeout(300)
         check('кнопка просмотра есть у md и подписана «просмотр»',
@@ -453,6 +455,7 @@ def hello(name: str) -> str:
                   table: v.querySelectorAll('table tr').length, quote: !!v.querySelector('blockquote'),
                   hr: !!v.querySelector('hr'), fence: v.querySelectorAll('pre code .hljs-keyword').length,
                   linkTarget: link ? link.getAttribute('target') : null,
+                  img: (() => { const i = v.querySelector('img'); return i ? i.getAttribute('src') : null; })(),
                   xss: typeof window.__xss, script: !!v.querySelector('script'),
                   jsHref: !!v.querySelector('a[href^="javascript:"]')};
         })()""")
@@ -460,6 +463,7 @@ def hello(name: str) -> str:
               bool(pv['h1']) and pv['h2'] and pv['ul'] >= 3 and pv['nested'] and pv['ol'] == 2
               and pv['table'] >= 2 and pv['quote'] and pv['hr'] and pv['fence'] > 0 and pv['textareaHidden'], str(pv))
         check('просмотр md: внешняя ссылка открывается в новой вкладке', pv['linkTarget'] == '_blank', str(pv['linkTarget']))
+        check('просмотр md: картинка из папки файла ищется рядом с файлом', pv['img'] == '/11/pic.png', str(pv['img']))
         check('просмотр md: сырой html и javascript: не выполняются',
               pv['xss'] == 'undefined' and not pv['script'] and not pv['jsHref'], str(pv))
         page.click('#viewbtn')

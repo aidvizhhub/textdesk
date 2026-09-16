@@ -515,7 +515,15 @@ function setPreview(on){
   viewbtn.classList.toggle('on', can);
   viewbtn.setAttribute('aria-pressed', can ? 'true' : 'false');
   viewbtn.textContent = can ? 'текст' : 'просмотр';
-  if(can) view.innerHTML = MD.render(area.value || '');
+  if(can){
+    view.innerHTML = MD.render(area.value || '');
+    const dir = serverTarget && serverTarget.includes('/') ? '/' + serverTarget.split('/').slice(0, -1).join('/') + '/' : '';
+    if(dir) for(const el of view.querySelectorAll('img[src],a[href]')){
+      const attr = el.tagName === 'IMG' ? 'src' : 'href';
+      const u = el.getAttribute(attr) || '';
+      if(u && !/^([a-z][a-z0-9+.-]*:|\/|#)/i.test(u)) el.setAttribute(attr, dir + u);
+    }
+  }
   view.scrollTop = 0;
   upd();
 }
