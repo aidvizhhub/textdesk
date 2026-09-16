@@ -32,7 +32,7 @@ try {
 :root{
   --bg:#1c2024; --panel:#242930; --fg:#e3e7ec; --dim:#8e98a3; --line:#343a42;
   --btn:#2a3038; --btnfg:#e3e7ec; --acc:#ffd43b;
-  --tok-kw:#c792ea; --tok-str:#95d18f; --tok-com:#6b7683; --tok-num:#ffb86c; --tok-fn:#82aaff; --tok-type:#7fd1e0; --sel:rgba(255,212,59,.30); --sel:rgba(255,212,59,.26);
+  --tok-kw:#c792ea; --tok-str:#95d18f; --tok-com:#6b7683; --tok-num:#ffb86c; --tok-fn:#82aaff; --tok-type:#7fd1e0; --tok-del:#ff8f8f; --sel:rgba(255,212,59,.30); --sel:rgba(255,212,59,.26);
   --gut:calc(4ch + 1.7rem);
   --bpy:24px; --bpx:34px;
   --book-lh-ratio:1.75;
@@ -42,7 +42,7 @@ try {
 html.light{
   --bg:#ffffff; --panel:#ffffff; --fg:#20252b; --dim:#6a737d; --line:#e4e6e3;
   --btn:#ffffff; --btnfg:#333a42; --acc:#9a6b00;
-  --tok-kw:#7c3aed; --tok-str:#116329; --tok-com:#8a929b; --tok-num:#b45309; --tok-fn:#0b62a4; --tok-type:#0f766e; --sel:rgba(154,107,0,.22); --sel:rgba(154,107,0,.18);
+  --tok-kw:#7c3aed; --tok-str:#116329; --tok-com:#8a929b; --tok-num:#b45309; --tok-fn:#0b62a4; --tok-type:#0f766e; --tok-del:#b42318; --sel:rgba(154,107,0,.22); --sel:rgba(154,107,0,.18);
   color-scheme:light;
   scrollbar-color:#d7d9d6 transparent;
 }
@@ -110,6 +110,13 @@ textarea::selection{background:var(--sel)}
 #back .hljs-number{color:var(--tok-num)}
 #back .hljs-title,#back .hljs-name,#back .hljs-section,#back .hljs-selector-id,#back .hljs-selector-class{color:var(--tok-fn)}
 #back .hljs-built_in,#back .hljs-type,#back .hljs-attr,#back .hljs-attribute,#back .hljs-meta,#back .hljs-symbol{color:var(--tok-type)}
+#back .hljs-strong{font-weight:700}
+#back .hljs-emphasis{font-style:italic}
+#back .hljs-code{color:var(--tok-num)}
+#back .hljs-bullet{color:var(--dim)}
+#back .hljs-link{color:var(--tok-fn);text-decoration:underline}
+#back .hljs-addition{color:var(--tok-str)}
+#back .hljs-deletion{color:var(--tok-del)}
 #bookl,#bookr{position:fixed;top:50%;transform:translateY(-50%);z-index:15;display:none;align-items:center;justify-content:center;width:42px;height:92px;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--fg);font-size:20px;cursor:pointer;opacity:.85}
 #bookl{left:10px}
 #bookr{right:10px}
@@ -263,6 +270,7 @@ function isCodeName(name){
   return !!(m && HL_LANGS[m[1].toLowerCase()]);
 }
 function autoWrap(text, name){
+  if(/\.(md|markdown|txt|tex|rst|org|adoc)$/i.test(name || '')) return true;   // проза: заголовки и абзацы читаются только с переносом
   if(!isCodeName(name)) return true;
   let max = 0, cur = 0;
   for(let i = 0; i < text.length; i++){

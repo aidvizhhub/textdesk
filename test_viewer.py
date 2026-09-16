@@ -238,6 +238,8 @@ try:
         longline.write_text('x' * 4000 + '\nвторая строка\n', encoding='utf-8')
         (root / 'wide.py').write_text(('x = "' + 'y' * 500 + '"\n') * 60, encoding='utf-8')
         (root / 'bundle.min.js').write_text('var a=' + '"x",' * 1200 + '"z";\n', encoding='utf-8')
+        (root / 'notes.md').write_text('# Заголовок\n\n**жирный** и *курсив* и `код` и [ссылка](https://example.com)\n\n- пункт раз\n- пункт два\n', encoding='utf-8')
+        (root / 'tool.diff').write_text('--- a\n+++ b\n-старая строка\n+новая строка\n общая\n', encoding='utf-8')
         page.goto(base + '?file=longline.txt')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.getElementById('t').value.length > 0")
@@ -374,6 +376,34 @@ try:
         page.wait_for_timeout(300)
         check('авто-перенос: выбор пользователя сильнее эвристики',
               page.evaluate("document.body.classList.contains('nowrap')"))
+
+        page.evaluate("localStorage.removeItem('txtviewer')")
+        page.goto(base + '?file=notes.md')
+        page.wait_for_function("document.querySelectorAll('#back span').length > 0")
+        page.wait_for_timeout(300)
+        md = page.evaluate("""(() => {
+          const b = document.getElementById('back');
+          const css = s => { const e = b.querySelector(s); return e ? getComputedStyle(e) : null; };
+          const strong = css('.hljs-strong'), emph = css('.hljs-emphasis'), code = css('.hljs-code'),
+                link = css('.hljs-link'), bullet = css('.hljs-bullet');
+          return {nowrap: document.body.classList.contains('nowrap'),
+                  section: !!b.querySelector('.hljs-section'),
+                  strong: strong && strong.fontWeight, emphasis: emph && emph.fontStyle,
+                  code: code && code.color, link: link && link.textDecorationLine, bullet: bullet && bullet.color};
+        })()""")
+        check('md: открывается с переносом (это проза) и заголовок подсвечен',
+              (not md['nowrap']) and md['section'], str(md))
+        check('md: жирный, курсив, код, ссылка и пункты покрашены',
+              md['strong'] in ('700', 'bold') and md['emphasis'] == 'italic' and md['link'] == 'underline'
+              and md['code'] and md['bullet'], str(md))
+        page.goto(base + '?file=tool.diff')
+        page.wait_for_function("document.querySelectorAll('#back span').length > 0")
+        df = page.evaluate("""(() => {
+          const b = document.getElementById('back');
+          const g = s => { const e = b.querySelector(s); return e ? getComputedStyle(e).color : null; };
+          return {add: g('.hljs-addition'), del: g('.hljs-deletion')};
+        })()""")
+        check('diff: добавление и удаление разного цвета', bool(df['add']) and bool(df['del']) and df['add'] != df['del'], str(df))
         page.goto(base + '?file=big.py')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.querySelector('#back .ln .hljs-number') !== null")
