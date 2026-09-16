@@ -3,6 +3,7 @@ Description=textdesk — локальный веб-редактор тексто
 After=network.target
 
 [Service]
+RequiresMountsFor=/run/media/admin1/DATA
 Type=simple
 WorkingDirectory=/path/to/textdesk
 ExecStart=/usr/bin/python3 /path/to/textdesk/serve.py --no-browser
