@@ -82,7 +82,7 @@ body,.bar,.stat,button{transition:background-color .18s,color .18s,border-color 
 #navcrumbs{display:flex;gap:5px;align-items:center;flex-wrap:wrap;padding:8px 11px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--dim)}
 #navcrumbs button{background:none;border:0;color:var(--acc);cursor:pointer;padding:1px 4px;font:inherit}
 #navfilter{margin-left:auto;color:var(--dim)}
-#navlist{overflow:auto;padding:5px;overscroll-behavior:contain}
+#navlist{overflow:auto;padding:5px}
 .navitem{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--fg)}
 .navitem.sel{background:var(--btn);outline:1px solid var(--acc);outline-offset:-1px}
 .navitem .dirc{color:var(--acc);min-width:14px;text-align:center}
@@ -916,9 +916,11 @@ function pathResolve(raw){
 }
 nav.addEventListener('click', e => { if(e.target === nav) navClose(); });
 nav.addEventListener('wheel', e => {
-  if(e.target.closest && e.target.closest('#navlist')) return;   // список листается сам
+  const items = navFiltered();
+  if(!items.length) return;
   e.preventDefault();
-  navlist.scrollTop += e.deltaY;                                  // модалка сама решает, что скроллить
+  navSel = Math.max(0, Math.min(items.length - 1, navSel + (e.deltaY > 0 ? 1 : -1)));
+  renderNav();
 }, {passive:false});
 window.addEventListener('keydown', e => {
   if((e.ctrlKey || e.metaKey) && 'pPзЗ'.indexOf(e.key) !== -1){

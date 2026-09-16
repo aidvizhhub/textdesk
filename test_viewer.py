@@ -775,35 +775,30 @@ def hello(name: str) -> str:
             window.__wheel.push(rec);
             setTimeout(() => { rec.p = e.defaultPrevented; }, 0);
           }, true);
-          return {ta: Math.round(document.getElementById('t').scrollTop),
-                  list: Math.round(document.getElementById('navlist').scrollTop),
-                  scrollable: document.getElementById('navlist').scrollHeight > document.getElementById('navlist').clientHeight};
+          return {ta: Math.round(document.getElementById('t').scrollTop), sel: navSel,
+                  count: navFiltered().length};
         }""")
+        page.evaluate("navSel = 0; renderNav();")
         box = page.locator('#navlist').bounding_box()
         page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
-        page.mouse.wheel(0, 240)
-        page.wait_for_timeout(250)
-        w1 = page.evaluate("""() => ({ta: Math.round(document.getElementById('t').scrollTop),
-                                      list: Math.round(document.getElementById('navlist').scrollTop),
+        page.mouse.wheel(0, 120)
+        page.wait_for_timeout(200)
+        w1 = page.evaluate("""() => ({sel: navSel, ta: Math.round(document.getElementById('t').scrollTop),
                                       last: window.__wheel[window.__wheel.length - 1]})""")
         page.mouse.move(box['x'] + 20, box['y'] - 90)
-        page.mouse.wheel(0, 300)
-        page.wait_for_timeout(250)
-        w2 = page.evaluate("""() => ({ta: Math.round(document.getElementById('t').scrollTop),
-                                      list: Math.round(document.getElementById('navlist').scrollTop),
+        page.mouse.wheel(0, 120)
+        page.wait_for_timeout(200)
+        w2 = page.evaluate("""() => ({sel: navSel, ta: Math.round(document.getElementById('t').scrollTop),
                                       last: window.__wheel[window.__wheel.length - 1]})""")
         page.mouse.move(20, 700)
-        page.mouse.wheel(0, 300)
-        page.wait_for_timeout(250)
-        w3 = page.evaluate("""() => ({ta: Math.round(document.getElementById('t').scrollTop),
-                                      list: Math.round(document.getElementById('navlist').scrollTop),
+        page.mouse.wheel(0, -120)
+        page.wait_for_timeout(200)
+        w3 = page.evaluate("""() => ({sel: navSel, ta: Math.round(document.getElementById('t').scrollTop),
                                       last: window.__wheel[window.__wheel.length - 1]})""")
-        check('обзор: колесо листает список модалки, а не страницу под ней',
-              w2['ta'] == pg_wheel['ta'] and w3['ta'] == pg_wheel['ta']
-              and w2['last']['p'] is True and w3['last']['p'] is True
-              and (w1['list'] >= pg_wheel['list'] or not pg_wheel['scrollable'])
-              and w2['list'] > pg_wheel['list'] and w3['list'] > w2['list']
-              and w1['last']['p'] is False,
+        check('обзор: колесо двигает выбор по списку, как стрелки, и не трогает страницу под модалкой',
+              w1['sel'] == 1 and w2['sel'] == 2 and w3['sel'] == 1
+              and w1['ta'] == 0 and w2['ta'] == 0 and w3['ta'] == 0
+              and w2['last']['p'] is True and w3['last']['p'] is True,
               'старт %s, над списком %s, над полями %s, над фоном %s' % (pg_wheel, w1, w2, w3))
         page.keyboard.press('PageDown')
         page.wait_for_timeout(200)
