@@ -99,7 +99,7 @@ body,.bar,.stat,button{transition:background-color .18s,color .18s,border-color 
 #navcrumbs{display:flex;gap:5px;align-items:center;flex-wrap:wrap;padding:8px 11px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--dim)}
 #navcrumbs button{background:none;border:0;color:var(--acc);cursor:pointer;padding:1px 4px;font:inherit}
 #navfilter{margin-left:auto;color:var(--dim)}
-#navlist{overflow:auto;padding:5px}
+#navlist{overflow:auto;padding:5px;overscroll-behavior:contain}
 .navitem{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--fg)}
 .navitem.sel{background:var(--btn);outline:1px solid var(--acc);outline-offset:-1px}
 .navitem .dirc{color:var(--acc);min-width:14px;text-align:center}
@@ -217,7 +217,7 @@ body.book #wrapbtn{display:none}
 <button id="bookr" title="вперёд" tabindex="-1">&#8250;</button>
 <div id="nav" hidden>
   <div id="navpanel">
-    <div id="navpath"><input id="pathin" type="text" spellcheck="false" placeholder="путь к файлу или папке…"><input id="navgrep" type="text" spellcheck="false" title="поиск по всем файлам корня (Ctrl+Shift+F)" placeholder="поиск по корню, min 2 символа… (Enter)"></div>
+    <div id="navpath"><input id="pathin" type="text" spellcheck="false" placeholder="имя файла или папки… (Enter)"><input id="navgrep" type="text" spellcheck="false" title="поиск по всем файлам корня (Ctrl+Shift+F)" placeholder="поиск по корню, min 2 символа… (Enter)"></div>
     <div id="navcrumbs"></div>
     <div id="navlist"></div>
   </div>
@@ -772,7 +772,7 @@ async function loadTree(dir){
     navAbs = false;
     navGrep = null;
     navDir = data.dir || '';
-    if(document.activeElement !== pathin) pathin.value = navDir ? rootPath + '/' + navDir : rootPath;
+    if(document.activeElement !== pathin) pathin.placeholder = navDir ? rootPath + '/' + navDir : rootPath;
     st.navdir = navDir;
     save();
     navItems = [];
@@ -786,10 +786,36 @@ async function loadTree(dir){
 }
 function openNav(dir){
   nav.hidden = false;
+  pathin.value = '';
+  navFilter = '';
   loadTree(dir || '');
+  pathin.focus();
 }
 navbtn.addEventListener('click', () => openNav(st.navdir || ''));
 const pathin = document.getElementById('pathin');
+pathin.addEventListener('input', () => {
+  const v = pathin.value;
+  navFilter = v.indexOf('/') === -1 ? v : '';
+  navGrep = null;
+  navSel = 0;
+  renderNav();
+});
+pathin.addEventListener('keydown', e => {
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    const v = pathin.value.trim();
+    if(v.indexOf('/') !== -1 || /^~/.test(v)){ pathResolve(v); return; }
+    if(v){ navActivate(navSel); return; }
+    navNote('введи имя файла, папки или путь');
+  } else if(e.key === 'Escape'){
+    e.preventDefault();
+    navClose();
+  } else if(e.key === 'Backspace' && !pathin.value){
+    e.preventDefault();
+    const up = navItems.find(it => it.kind === 'up');
+    if(up) openNav(up.rel);
+  }
+});
 const navgrep = document.getElementById('navgrep');
 navgrep.addEventListener('keydown', async e => {
   if(e.key === 'Escape'){
@@ -865,7 +891,7 @@ async function loadAbsTree(abs){
     for(const f of (data.files || [])) navItems.push({kind: 'file', rel: f, name: f.split('/').filter(Boolean).pop()});
     navFilter = '';
     navSel = 0;
-    if(document.activeElement !== pathin) pathin.value = navDir;
+    if(document.activeElement !== pathin) pathin.placeholder = navDir;
     renderNav();
   } catch(e){}
 }
@@ -899,11 +925,10 @@ function pathResolve(raw){
   }
   pathOpen(p);
 }
-pathin.addEventListener('keydown', e => {
-  if(e.key === 'Enter'){ e.preventDefault(); pathResolve(pathin.value); }
-  else if(e.key === 'Escape'){ e.preventDefault(); navClose(); }
-});
 nav.addEventListener('click', e => { if(e.target === nav) navClose(); });
+nav.addEventListener('wheel', e => {
+  if(!e.target.closest || !e.target.closest('#navlist')) e.preventDefault();
+}, {passive:false});
 window.addEventListener('keydown', e => {
   if((e.ctrlKey || e.metaKey) && 'pPзЗ'.indexOf(e.key) !== -1){
     e.preventDefault();
@@ -918,20 +943,15 @@ window.addEventListener('keydown', e => {
   if(e.key === 'Escape'){ e.preventDefault(); navClose(); }
   else if(e.key === 'ArrowDown'){ e.preventDefault(); navSel = Math.min(items.length - 1, navSel + 1); renderNav(); }
   else if(e.key === 'ArrowUp'){ e.preventDefault(); navSel = Math.max(0, navSel - 1); renderNav(); }
+  else if(inField){ /* Enter и Backspace в полях разбирают сами поля */ }
   else if(e.key === 'Enter'){ e.preventDefault(); navActivate(navSel); }
   else if(e.key === 'Backspace'){
     e.preventDefault();
-    if(navFilter){ navFilter = navFilter.slice(0, -1); navSel = 0; renderNav(); }
+    if(navFilter){ navFilter = ''; navSel = 0; renderNav(); }
     else {
       const up = navItems.find(it => it.kind === 'up');
       if(up) openNav(up.rel);
     }
-  }
-  else if(e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey){
-    e.preventDefault();
-    navFilter += e.key;
-    navSel = 0;
-    renderNav();
   }
 });
 

@@ -747,6 +747,57 @@ def hello(name: str) -> str:
               page.evaluate('location.search') == '?file=VPN.md', repr(page.evaluate('location.search')))
         page.keyboard.press('Control+p')
         page.wait_for_selector('#nav:not([hidden])')
+        page.wait_for_timeout(400)
+        page.keyboard.type('11')
+        page.wait_for_function("document.querySelectorAll('#navlist .navitem').length === 1"
+                               " && document.querySelector('#navlist .navitem').textContent.includes('11')")
+        check('обзор: набор имени фильтрует дерево и виден в поле',
+              page.eval_on_selector('#pathin', 'el => el.value') == '11'
+              and 'фильтр' in page.eval_on_selector('#navcrumbs', 'el => el.textContent'),
+              page.eval_on_selector('#navcrumbs', 'el => el.textContent'))
+        page.keyboard.press('Enter')
+        page.wait_for_function("document.querySelector('#navcrumbs').textContent.includes('наверх') === false")
+        page.wait_for_timeout(400)
+        rows = page.eval_on_selector_all('#navlist .navitem', 'els => els.map(e => e.textContent)')
+        check('обзор: Enter открыл папку из фильтра', any('11.txt' in r for r in rows), str(rows))
+        pg_wheel = page.evaluate("""() => {
+          window.__wheel = [];
+          window.addEventListener('wheel', e => {
+            const rec = {t: (e.target.id || e.target.className || e.target.tagName), p: null};
+            window.__wheel.push(rec);
+            setTimeout(() => { rec.p = e.defaultPrevented; }, 0);
+          }, true);
+          return {ta: Math.round(document.getElementById('t').scrollTop),
+                  list: Math.round(document.getElementById('navlist').scrollTop),
+                  scrollable: document.getElementById('navlist').scrollHeight > document.getElementById('navlist').clientHeight};
+        }""")
+        box = page.locator('#navlist').bounding_box()
+        page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+        page.mouse.wheel(0, 240)
+        page.wait_for_timeout(250)
+        w1 = page.evaluate("""() => ({ta: Math.round(document.getElementById('t').scrollTop),
+                                      list: Math.round(document.getElementById('navlist').scrollTop),
+                                      last: window.__wheel[window.__wheel.length - 1]})""")
+        page.mouse.move(box['x'] + 20, box['y'] - 90)
+        page.mouse.wheel(0, 300)
+        page.wait_for_timeout(250)
+        w2 = page.evaluate("""() => ({ta: Math.round(document.getElementById('t').scrollTop),
+                                      last: window.__wheel[window.__wheel.length - 1]})""")
+        page.mouse.move(20, 700)
+        page.mouse.wheel(0, 300)
+        page.wait_for_timeout(250)
+        w3 = page.evaluate("""() => ({ta: Math.round(document.getElementById('t').scrollTop),
+                                      last: window.__wheel[window.__wheel.length - 1]})""")
+        check('обзор: колесо листает список модалки, а не страницу под ней',
+              w2['ta'] == pg_wheel['ta'] and w3['ta'] == pg_wheel['ta']
+              and w2['last']['p'] is True and w3['last']['p'] is True
+              and (w1['list'] >= pg_wheel['list'] or not pg_wheel['scrollable'])
+              and w1['last']['p'] is False,
+              'старт %s, над списком %s, над полями %s, над фоном %s' % (pg_wheel, w1, w2, w3))
+        page.keyboard.press('Escape')
+        page.wait_for_function("document.getElementById('nav').hidden")
+        page.keyboard.press('Control+p')
+        page.wait_for_selector('#nav:not([hidden])')
         page.keyboard.press('Escape')
         check('навигатор закрывается по Esc', page.eval_on_selector('#nav', 'el => el.hidden'))
 
