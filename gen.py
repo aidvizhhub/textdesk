@@ -54,21 +54,24 @@ body{height:100%;margin:0;display:flex;flex-direction:column;overflow:hidden;bac
 .bar b{display:inline-flex;align-items:center;gap:7px;font-weight:600}
 .bar b .ic{color:var(--dim)}
 .ctl{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-button{display:inline-flex;align-items:center;gap:.45em;background:var(--btn);border:1px solid var(--line);border-radius:7px;color:var(--btnfg);padding:6px 11px;font:inherit;font-size:12.8px;cursor:pointer}
-button:hover{border-color:var(--acc);color:var(--acc)}
-button:active{transform:translateY(1px)}
-button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
-button:disabled{opacity:.45;cursor:default}
-button:disabled:hover{border-color:var(--line);color:var(--btnfg)}
-#save.dirty,#cp.ok,.on{border-color:var(--acc);color:var(--acc)}
+button{display:inline-flex;align-items:center;gap:.5em;background:none;border:0;border-radius:8px;color:var(--btnfg);padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
+button:hover{background:var(--btn)}
+button:active{background:color-mix(in srgb, var(--fg) 13%, transparent)}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+button:disabled{opacity:.4;cursor:default}
+button:disabled:hover{background:none}
+.on,#cp.ok{background:color-mix(in srgb, var(--acc) 16%, transparent);color:var(--acc)}
+.on:hover,#cp.ok:hover{background:color-mix(in srgb, var(--acc) 26%, transparent)}
+#save.dirty{background:var(--acc);color:#20252b}
+#save.dirty:hover{background:color-mix(in srgb, var(--acc) 84%, #fff)}
 .ic{width:1.05em;height:1.05em;display:block;flex:none}
 #fsval{min-width:48px;text-align:center;color:var(--dim)}
-.seg{display:inline-flex;align-items:stretch;background:var(--btn);border:1px solid var(--line);border-radius:7px}
-.seg button{border:0;border-radius:0;background:transparent;padding:6px 11px}
+.seg{display:inline-flex;align-items:stretch;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{border-radius:0;padding:6px 10px}
 .seg button + button{border-left:1px solid var(--line)}
-.seg button:active{transform:none}
 .seg button:focus-visible{outline-offset:-2px}
 #reset:disabled{opacity:1;cursor:default}
+#reset:hover:not(:disabled){background:var(--btn)}
 #reset:hover:not(:disabled) #fsval{color:var(--acc)}
 .sep{flex:none;width:1px;height:14px;background:var(--line)}
 main{flex:1;display:flex;width:100%;padding:1.2rem clamp(1rem,4vw,2.6rem) 1.4rem;min-height:0}
