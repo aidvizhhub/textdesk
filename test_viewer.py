@@ -239,6 +239,36 @@ try:
         (root / 'wide.py').write_text(('x = "' + 'y' * 500 + '"\n') * 60, encoding='utf-8')
         (root / 'bundle.min.js').write_text('var a=' + '"x",' * 1200 + '"z";\n', encoding='utf-8')
         (root / 'notes.md').write_text('# Заголовок\n\n**жирный** и *курсив* и `код` и [ссылка](https://example.com)\n\n- пункт раз\n- пункт два\n', encoding='utf-8')
+        (root / 'canon.md').write_text('''# Заголовок первый
+
+Абзац с **жирным**, *курсивом*, `инлайн-кодом` и [ссылкой](https://example.com/page).
+
+## Список
+
+- пункт раз
+  - вложенный пункт
+- пункт два
+
+1. первый
+2. второй
+
+> цитата в блоке
+
+| язык | год |
+| --- | --- |
+| python | 1991 |
+
+```python
+def hello(name: str) -> str:
+    return f"привет, {name}"
+```
+
+---
+
+<script>window.__xss = 1</script>
+
+[опасная](javascript:window.__xss=2)
+''', encoding='utf-8')
         (root / 'tool.diff').write_text('--- a\n+++ b\n-старая строка\n+новая строка\n общая\n', encoding='utf-8')
         page.goto(base + '?file=longline.txt')
         page.wait_for_load_state('networkidle')
@@ -404,6 +434,52 @@ try:
           return {add: g('.hljs-addition'), del: g('.hljs-deletion')};
         })()""")
         check('diff: добавление и удаление разного цвета', bool(df['add']) and bool(df['del']) and df['add'] != df['del'], str(df))
+
+        page.goto(base + '?file=canon.md')
+        page.wait_for_function("!document.getElementById('viewbtn').hidden")
+        page.wait_for_timeout(300)
+        check('кнопка просмотра есть у md и подписана «просмотр»',
+              page.evaluate("document.getElementById('viewbtn').textContent") == 'просмотр')
+        page.click('#viewbtn')
+        page.wait_for_function("document.body.classList.contains('preview')")
+        page.wait_for_timeout(300)
+        pv = page.evaluate("""(() => {
+          const v = document.getElementById('view');
+          const link = v.querySelector('a[href^="https"]');
+          return {textareaHidden: getComputedStyle(document.getElementById('t')).display === 'none',
+                  h1: v.querySelector('h1') ? v.querySelector('h1').textContent : null,
+                  h2: !!v.querySelector('h2'), ul: v.querySelectorAll('ul li').length,
+                  nested: !!v.querySelector('ul li ul li'), ol: v.querySelectorAll('ol li').length,
+                  table: v.querySelectorAll('table tr').length, quote: !!v.querySelector('blockquote'),
+                  hr: !!v.querySelector('hr'), fence: v.querySelectorAll('pre code .hljs-keyword').length,
+                  linkTarget: link ? link.getAttribute('target') : null,
+                  xss: typeof window.__xss, script: !!v.querySelector('script'),
+                  jsHref: !!v.querySelector('a[href^="javascript:"]')};
+        })()""")
+        check('просмотр md: заголовки, списки, таблица, цитата, линия и блок кода с подсветкой',
+              bool(pv['h1']) and pv['h2'] and pv['ul'] >= 3 and pv['nested'] and pv['ol'] == 2
+              and pv['table'] >= 2 and pv['quote'] and pv['hr'] and pv['fence'] > 0 and pv['textareaHidden'], str(pv))
+        check('просмотр md: внешняя ссылка открывается в новой вкладке', pv['linkTarget'] == '_blank', str(pv['linkTarget']))
+        check('просмотр md: сырой html и javascript: не выполняются',
+              pv['xss'] == 'undefined' and not pv['script'] and not pv['jsHref'], str(pv))
+        page.click('#viewbtn')
+        page.wait_for_timeout(200)
+        back = page.evaluate("""() => ({preview: document.body.classList.contains('preview'),
+                                       same: document.getElementById('t').value.includes('Заголовок первый')})""")
+        check('просмотр md: возврат к исходнику сохраняет текст', (not back['preview']) and back['same'], str(back))
+        page.click('#viewbtn')
+        page.wait_for_function("document.body.classList.contains('preview')")
+        page.click('#bookbtn')
+        page.wait_for_timeout(300)
+        st2 = page.evaluate("""() => ({book: document.body.classList.contains('book'), preview: document.body.classList.contains('preview'),
+                                       btn: document.getElementById('viewbtn').hidden})""")
+        check('книга выключает просмотр и прячет кнопку просмотра', st2['book'] and not st2['preview'] and st2['btn'], str(st2))
+        page.click('#bookbtn')
+        page.wait_for_timeout(200)
+        page.goto(base + '?file=notes.md')
+        page.wait_for_timeout(300)
+        check('кнопка просмотра есть только у md',
+              page.evaluate("!document.getElementById('viewbtn').hidden"), 'notes.md')
         page.goto(base + '?file=big.py')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.querySelector('#back .ln .hljs-number') !== null")

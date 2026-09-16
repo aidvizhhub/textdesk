@@ -18,6 +18,7 @@ import webbrowser
 
 HERE = pathlib.Path(__file__).resolve().parent
 PAGE_FILE = HERE / 'index.html'
+VENDORED = ('/hljs.min.js', '/mdit.min.js')
 NO_BROWSER = '--no-browser' in sys.argv[1:]
 ARGS = [a for a in sys.argv[1:] if a != '--no-browser']
 PORT = int(ARGS[0]) if len(ARGS) > 0 else 8792
@@ -127,9 +128,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if path == '/hljs.min.js':
+        if path in VENDORED:
             try:
-                data = (PAGE_FILE.parent / 'hljs.min.js').read_bytes()
+                data = (PAGE_FILE.parent / path.lstrip('/')).read_bytes()
             except OSError:
                 self.send_error(404)
                 return

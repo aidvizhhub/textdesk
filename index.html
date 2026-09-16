@@ -87,22 +87,45 @@ body,.bar,.stat,button{transition:background-color .18s,color .18s,border-color 
 .navitem .dirc{color:var(--acc);min-width:14px;text-align:center}
 .navempty{padding:11px;color:var(--dim);font-size:12.5px}
 textarea::selection{background:var(--sel)}
-#back .hljs-keyword,#back .hljs-selector-tag,#back .hljs-literal{color:var(--tok-kw)}
-#back .hljs-string,#back .hljs-regexp,#back .hljs-template-tag{color:var(--tok-str)}
-#back .hljs-comment,#back .hljs-quote{color:var(--tok-com);font-style:italic}
-#back .hljs-number{color:var(--tok-num)}
-#back .hljs-title,#back .hljs-name,#back .hljs-section,#back .hljs-selector-id,#back .hljs-selector-class{color:var(--tok-fn)}
-#back .hljs-built_in,#back .hljs-type,#back .hljs-attr,#back .hljs-attribute,#back .hljs-meta,#back .hljs-symbol{color:var(--tok-type)}
-#back .hljs-strong{font-weight:700}
-#back .hljs-emphasis{font-style:italic}
-#back .hljs-code{color:var(--tok-num)}
-#back .hljs-bullet{color:var(--dim)}
-#back .hljs-link{color:var(--tok-fn);text-decoration:underline}
-#back .hljs-addition{color:var(--tok-str)}
-#back .hljs-deletion{color:var(--tok-del)}
+.hljs-keyword,.hljs-selector-tag,.hljs-literal{color:var(--tok-kw)}
+.hljs-string,.hljs-regexp,.hljs-template-tag{color:var(--tok-str)}
+.hljs-comment,.hljs-quote{color:var(--tok-com);font-style:italic}
+.hljs-number{color:var(--tok-num)}
+.hljs-title,.hljs-name,.hljs-section,.hljs-selector-id,.hljs-selector-class{color:var(--tok-fn)}
+.hljs-built_in,.hljs-type,.hljs-attr,.hljs-attribute,.hljs-meta,.hljs-symbol{color:var(--tok-type)}
+.hljs-strong{font-weight:700}
+.hljs-emphasis{font-style:italic}
+.hljs-code{color:var(--tok-num)}
+.hljs-bullet{color:var(--dim)}
+.hljs-link{color:var(--tok-fn);text-decoration:underline}
+.hljs-addition{color:var(--tok-str)}
+.hljs-deletion{color:var(--tok-del)}
 #bookl,#bookr{position:fixed;top:50%;transform:translateY(-50%);z-index:15;display:none;align-items:center;justify-content:center;width:42px;height:92px;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--fg);font-size:20px;cursor:pointer;opacity:.85}
 #bookl{left:10px}
 #bookr{right:10px}
+body.preview #back,body.preview #backw,body.preview textarea{display:none}
+#view{display:none;position:absolute;inset:0;overflow:auto;padding:0 0 2rem;line-height:1.6}
+body.preview #view{display:block}
+body.preview .editor::before{display:none}
+#view > *:first-child{margin-top:0}
+#view h1,#view h2,#view h3,#view h4,#view h5,#view h6{line-height:1.25;margin:1.5em 0 .5em;font-weight:600}
+#view h1{font-size:1.6em;border-bottom:1px solid var(--line);padding-bottom:.3em}
+#view h2{font-size:1.3em;border-bottom:1px solid var(--line);padding-bottom:.25em}
+#view h3{font-size:1.12em}
+#view p,#view ul,#view ol,#view blockquote,#view table,#view pre{margin:.85em 0}
+#view ul,#view ol{padding-left:1.6em}
+#view li{margin:.2em 0}
+#view li > ul,#view li > ol{margin:.25em 0}
+#view code{background:color-mix(in srgb, var(--fg) 8%, transparent);border-radius:5px;padding:.12em .35em;font:inherit;font-size:.95em}
+#view pre{background:color-mix(in srgb, var(--fg) 6%, transparent);border:1px solid var(--line);border-radius:9px;padding:.7em .9em;overflow-x:auto}
+#view pre code{background:none;padding:0;font-size:1em}
+#view blockquote{border-left:3px solid var(--line);padding:0 .9em;color:var(--dim)}
+#view a{color:var(--tok-fn)}
+#view img{max-width:100%}
+#view hr{border:0;border-top:1px solid var(--line);margin:1.4em 0}
+#view table{border-collapse:collapse}
+#view th,#view td{border:1px solid var(--line);padding:.3em .6em}
+#view th{background:color-mix(in srgb, var(--fg) 6%, transparent);text-align:left}
 .editor::before{content:'';position:absolute;top:0;bottom:0;left:calc(var(--gut) + .45rem);width:1px;background:var(--line);pointer-events:none;z-index:2}
 body.book .editor::before{left:calc(var(--bpx) + var(--gut) + .45rem)}
 body.book #bookl,body.book #bookr{display:flex}
@@ -145,6 +168,7 @@ body.book #wrapbtn{display:none}
     <span class="sep" aria-hidden="true"></span>
     <button id="open" title="открыть другой файл с диска"><svg class="ic" aria-hidden="true"><use href="#i-folder-open"/></svg>открыть файл…</button>
     <button id="navbtn" title="файлы сервера (Ctrl+P)" hidden><svg class="ic" aria-hidden="true"><use href="#i-folder-open"/></svg>файлы</button>
+    <button id="viewbtn" title="просмотр markdown: собранный документ вместо исходника" hidden>просмотр</button>
     <button id="wrapbtn" title="перенос длинных строк" class="on">перенос</button>
     <button id="bookbtn" title="режим книги: страницы влево-вправо">книга</button>
     <button id="save" title="записать правки обратно в файл (Ctrl+S)"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg><span id="savelbl">сохранить</span></button>
@@ -157,6 +181,7 @@ body.book #wrapbtn{display:none}
   <div class="editor">
     <div id="backw" aria-hidden="true"><div id="back"></div></div>
     <textarea id="t" spellcheck="false" wrap="soft"></textarea>
+    <div id="view"></div>
   </div>
 </main>
 <button id="bookl" title="назад" tabindex="-1">&#8249;</button>
@@ -170,6 +195,7 @@ body.book #wrapbtn{display:none}
 </div>
 <div class="stat"><span id="target"></span><span id="pos"></span><span id="cnt"></span><span id="booknum" hidden><input id="bookpage" type="text" inputmode="numeric" value="1" title="номер страницы — введи и жми Enter"> / <span id="booktotal"></span></span></div>
 <script src="hljs.min.js"></script>
+<script src="mdit.min.js"></script>
 <script>
 "use strict";
 window.addEventListener('error', e => {
@@ -210,8 +236,12 @@ const httpMode = /^https?:$/.test(location.protocol);
 function upd(){
   const v = area.value;
   const total = v.split('\n').length;
-  const line = bookActive() ? lineAtY(area.scrollTop) + 1 : v.slice(0, area.selectionStart).split('\n').length;
-  pos.textContent = 'строка ' + line + ' / ' + total;
+  if(document.body.classList.contains('preview')){
+    pos.textContent = 'просмотр';
+  } else {
+    const line = bookActive() ? lineAtY(area.scrollTop) + 1 : v.slice(0, area.selectionStart).split('\n').length;
+    pos.textContent = 'строка ' + line + ' / ' + total;
+  }
   cnt.textContent = v.length + ' символов';
 }
 ['input','keyup','click','select','focus'].forEach(ev => area.addEventListener(ev, upd));
@@ -464,10 +494,42 @@ function setDirty(v){
   } catch(e){}
 }
 
+function isMdName(name){ return /\.(md|markdown)$/i.test(name || ''); }
+const MD = window.markdownit ? window.markdownit({html:false, linkify:true}) : null;
+if(MD){
+  MD.renderer.rules.link_open = (tokens, idx, opts, env, self) => {
+    tokens[idx].attrSet('target', '_blank');
+    tokens[idx].attrSet('rel', 'noreferrer noopener');
+    return self.renderToken(tokens, idx, opts);
+  };
+  MD.options.highlight = (code, lang) => {
+    if(lang && window.hljs && hljs.getLanguage(lang)) return hljs.highlight(code, {language: lang, ignoreIllegals: true}).value;
+    return '';
+  };
+}
+const viewbtn = document.getElementById('viewbtn');
+const view = document.getElementById('view');
+function setPreview(on){
+  const can = !!on && !!MD && isMdName(curName) && !bookActive();
+  document.body.classList.toggle('preview', can);
+  viewbtn.classList.toggle('on', can);
+  viewbtn.setAttribute('aria-pressed', can ? 'true' : 'false');
+  viewbtn.textContent = can ? 'текст' : 'просмотр';
+  if(can) view.innerHTML = MD.render(area.value || '');
+  view.scrollTop = 0;
+  upd();
+}
+function updateViewBtn(){
+  const can = !!MD && isMdName(curName) && !bookActive();
+  viewbtn.hidden = !can;
+  if(!can && document.body.classList.contains('preview')) setPreview(false);
+}
+viewbtn.addEventListener('click', () => setPreview(!document.body.classList.contains('preview')));
 function loadText(text, name){
   curName = name || '';
   const auto = st.wrap === undefined;
   applyWrap(auto ? autoWrap(text, curName) : !!st.wrap, auto || bookActive());
+  updateViewBtn();
   area.value = text;
   area.setSelectionRange(0, 0);
   area.scrollTop = 0;
@@ -887,6 +949,7 @@ function bookGoto(n){
 function bookToggle(on){
   const to = on === undefined ? !bookActive() : on;
   document.body.classList.toggle('book', to);
+  updateViewBtn();
   bookbtn.classList.toggle('on', to);
   bookbtn.setAttribute('aria-pressed', to ? 'true' : 'false');
   st.book = to ? 1 : 0;
