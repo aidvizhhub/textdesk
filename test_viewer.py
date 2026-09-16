@@ -589,7 +589,9 @@ def hello(name: str) -> str:
         check('поиск по корню: список показывает совпадения из разных файлов',
               any('search.txt:' in h for h in hits) and any('search2.txt:' in h for h in hits), str(hits))
         check('поиск по корню: надпись фильтра дерева не липнет к поиску',
-              'фильтр' not in page.eval_on_selector('#navcrumbs', 'el => el.textContent'),
+              'фильтр' not in page.eval_on_selector('#navcrumbs', 'el => el.textContent')
+              and 'поиск «marker»' in page.eval_on_selector('#navcrumbs', 'el => el.textContent')
+              and '2 в 2' in page.eval_on_selector('#navcrumbs', 'el => el.textContent'),
               page.eval_on_selector('#navcrumbs', 'el => el.textContent'))
         page.click('#navlist .navitem:has(.hittext)')
         page.wait_for_function("document.getElementById('fname').textContent === 'search.txt'")

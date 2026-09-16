@@ -680,7 +680,13 @@ function navCrumbs(){
     b.addEventListener('click', () => openNav(dir));
     navcrumbs.append(sep, b);
   }
-  if(navFilter){
+  if(navGrep){
+    const fx = document.createElement('span');
+    fx.id = 'navfilter';
+    const d = navGrep.data || {};
+    fx.textContent = 'поиск «' + navGrep.q + '»: ' + (d.hits_total || 0) + ' в ' + (d.files_total || 0) + ' файлах' + (d.truncated ? ', обрезано' : '');
+    navcrumbs.append(fx);
+  } else if(navFilter){
     const fx = document.createElement('span');
     fx.id = 'navfilter';
     fx.textContent = 'фильтр: ' + navFilter;
@@ -817,7 +823,7 @@ navgrep.addEventListener('keydown', async e => {
     const r = await fetch('/__grep?q=' + encodeURIComponent(q) + '&case=' + (findCase ? 1 : 0));
     if(!r.ok){ navNote('поиск не принял запрос'); return; }
     const data = await r.json();
-    navGrep = {q: q, case: findCase};
+    navGrep = {q: q, case: findCase, data: data};
     navAbs = false;
     navFilter = '';
     navItems = [];
