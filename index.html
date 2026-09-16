@@ -56,10 +56,12 @@ button:disabled:hover{border-color:var(--line);color:var(--btnfg)}
 main{flex:1;display:flex;width:100%;padding:1.2rem clamp(1rem,4vw,2.6rem) 1.4rem;min-height:0}
 .editor{flex:1;display:flex;min-height:0;position:relative;overflow:hidden}
 .editor::before{content:'';position:absolute;left:var(--gut);top:0;bottom:0;width:1px;background:var(--line);z-index:2;pointer-events:none}
-#back{position:absolute;left:0;top:0;overflow:hidden;pointer-events:none;user-select:none;color:var(--fg);white-space:pre-wrap;overflow-wrap:break-word;counter-reset:line;will-change:transform;z-index:0}
-#back .ln{position:relative;padding-left:calc(var(--gut) + 1.4rem);counter-increment:line;min-height:1.6em}
-#back .ln::before{content:counter(line);position:absolute;left:0;width:calc(var(--gut) - 2.2rem);text-align:right;color:var(--dim);font-size:.8rem}
-textarea{flex:1;width:100%;min-height:0;background:transparent;border:0;padding:0 0 0 calc(var(--gut) + 1.4rem);outline:none;resize:none;color:transparent;caret-color:var(--fg);font:inherit;white-space:pre-wrap;overflow-wrap:break-word;position:relative;z-index:1;overflow:auto}
+#back{position:absolute;left:0;top:0;overflow:hidden;pointer-events:none;user-select:none;color:var(--fg);white-space:pre-wrap;overflow-wrap:break-word;counter-reset:line;will-change:transform;transform:translate(var(--sx,0px),var(--sy,0px));z-index:0}
+body.nowrap #back{white-space:pre}
+body.nowrap #back .ln{white-space:pre}
+#back .ln{position:relative;padding-left:calc(var(--gut) + 1.6rem);counter-increment:line;min-height:1.6em}
+#back .ln::before{content:counter(line);position:absolute;left:0;width:calc(var(--gutw) + .2rem);white-space:nowrap;text-align:right;color:var(--dim);font-size:.8rem;transform:translateX(calc(-1 * var(--sx,0px)))}
+textarea{flex:1;width:100%;min-height:0;background:transparent;border:0;padding:0 0 0 calc(var(--gut) + 1.6rem);outline:none;resize:none;color:transparent;caret-color:var(--fg);font:inherit;white-space:pre-wrap;overflow-wrap:break-word;position:relative;z-index:1;overflow:auto}
 textarea::-webkit-scrollbar{width:.55rem;height:.55rem}
 textarea::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
 .stat{display:flex;gap:19px;padding:8px clamp(16px,4vw,38px);background:var(--panel);border-top:1px solid var(--line);font-size:12.5px;color:var(--dim)}
@@ -88,6 +90,8 @@ textarea::selection{background:var(--sel)}
 #bookl,#bookr{position:fixed;top:50%;transform:translateY(-50%);z-index:15;display:none;align-items:center;justify-content:center;width:42px;height:92px;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--fg);font-size:20px;cursor:pointer;opacity:.85}
 #bookl{left:10px}
 #bookr{right:10px}
+.editor::before{content:'';position:absolute;top:0;bottom:0;left:calc(var(--gut) + .45rem);width:1px;background:var(--line);pointer-events:none;z-index:2}
+body.book .editor::before{left:calc(var(--bpx) + var(--gut) + .45rem)}
 body.book #bookl,body.book #bookr{display:flex}
 #bookl:hover,#bookr:hover{border-color:var(--acc);color:var(--acc)}
 #booknum{color:var(--acc)}
@@ -125,6 +129,7 @@ body.book textarea{margin:var(--bpy) var(--bpx);overflow:hidden}
     <span class="sep" aria-hidden="true"></span>
     <button id="open" title="открыть другой файл с диска"><svg class="ic" aria-hidden="true"><use href="#i-folder-open"/></svg>открыть файл…</button>
     <button id="navbtn" title="файлы сервера (Ctrl+P)" hidden><svg class="ic" aria-hidden="true"><use href="#i-folder-open"/></svg>файлы</button>
+    <button id="wrapbtn" title="перенос длинных строк" class="on">перенос</button>
     <button id="bookbtn" title="режим книги: страницы влево-вправо">книга</button>
     <button id="save" title="записать правки обратно в файл (Ctrl+S)"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg><span id="savelbl">сохранить</span></button>
     <span class="sep" aria-hidden="true"></span>
@@ -200,11 +205,16 @@ upd();
 
 let pending = false;
 let gutNow = '';
-function syncScroll(){ back.style.transform = 'translateY(' + (-area.scrollTop) + 'px)'; }
+function syncScroll(){
+  root.style.setProperty('--sy', (-area.scrollTop) + 'px');
+  root.style.setProperty('--sx', (-area.scrollLeft) + 'px');
+}
 function buildBack(){
   const lines = area.value.split('\n');
-  const gut = 'calc(' + Math.max(3, String(lines.length).length + 1) + 'ch + 1.7rem)';
+  const digits = Math.max(3, String(lines.length).length + 1);
+  const gut = 'calc(' + digits + 'ch + 1.7rem)';
   if(gut !== gutNow){ gutNow = gut; root.style.setProperty('--gut', gut); }
+  root.style.setProperty('--gutw', digits + 'ch');
   const frag = document.createDocumentFragment();
   for(const t of lines){
     const d = document.createElement('div');
@@ -220,6 +230,22 @@ function buildBack(){
   highlightView();
   if(bookActive()){ bookLayout(); bookShow(); }
 }
+const wrapbtn = document.getElementById('wrapbtn');
+function isCodeName(name){
+  const m = /\.([A-Za-z0-9]+)$/.exec((name || '').split('/').pop());
+  return !!(m && HL_LANGS[m[1].toLowerCase()]);
+}
+function applyWrap(on){
+  st.wrap = on ? 1 : 0;
+  save();
+  area.setAttribute('wrap', on ? 'soft' : 'off');
+  document.body.classList.toggle('nowrap', !on);
+  wrapbtn.classList.toggle('on', on);
+  area.scrollLeft = 0;
+  syncScroll();
+  scheduleBack();
+}
+wrapbtn.addEventListener('click', () => applyWrap(document.body.classList.contains('nowrap')));
 function scheduleBack(){
   if(pending) return;
   pending = true;
@@ -409,6 +435,7 @@ function setDirty(v){
 
 function loadText(text, name){
   curName = name || '';
+  applyWrap(st.wrap === undefined ? !isCodeName(curName) : !!st.wrap);
   area.value = text;
   area.setSelectionRange(0, 0);
   area.scrollTop = 0;

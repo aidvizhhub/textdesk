@@ -200,6 +200,22 @@ try:
 
         big = root / 'big.py'
         big.write_text('value = 123\n' * 4000, encoding='utf-8')
+        longline = root / 'longline.txt'
+        longline.write_text('x' * 4000 + '\nвторая строка\n', encoding='utf-8')
+        page.goto(base + '?file=longline.txt')
+        page.wait_for_load_state('networkidle')
+        page.wait_for_function("document.getElementById('t').value.length > 0")
+        rows_wrap = page.evaluate("Math.round(back.children[0].offsetHeight / parseFloat(getComputedStyle(document.getElementById('t')).lineHeight))")
+        page.click('#wrapbtn')
+        page.wait_for_timeout(300)
+        rows_nowrap = page.evaluate("Math.round(back.children[0].offsetHeight / parseFloat(getComputedStyle(document.getElementById('t')).lineHeight))")
+        check('перенос выключается: длинная строка = одна', rows_wrap > 3 and rows_nowrap == 1,
+              'было %d строк, стало %d' % (rows_wrap, rows_nowrap))
+        check('перенос: wrap=off и класс nowrap', page.evaluate("document.getElementById('t').getAttribute('wrap') === 'off' && document.body.classList.contains('nowrap')"))
+        page.click('#wrapbtn')
+        page.wait_for_timeout(300)
+        check('перенос включается обратно', page.evaluate("document.getElementById('t').getAttribute('wrap') === 'soft' && !document.body.classList.contains('nowrap')"))
+
         page.goto(base + '?file=big.py')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.querySelector('#back .ln .hljs-number') !== null")
@@ -235,6 +251,11 @@ try:
           return atLineStart && !cut && card;
         })()""")
         check('книга: страница-карточка со строки и без обрезанных строк', bool(aligned))
+        sep = page.evaluate("""(() => {
+          const cs = getComputedStyle(document.querySelector('.editor'), '::before');
+          return cs.width + '|' + cs.backgroundColor;
+        })()""")
+        check('гаттер отделён линией', sep.startswith('1px') and 'rgba(0, 0, 0, 0)' not in sep, sep)
 
         page.mouse.move(450, 220)
         page.mouse.wheel(0, 400)
