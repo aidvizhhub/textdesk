@@ -220,14 +220,19 @@ try:
           const lh = parseFloat(getComputedStyle(t).lineHeight);
           const rows = t.clientHeight / lh;
           const winWhole = Math.abs(rows - Math.round(rows)) < 0.2;
+          const lns = Array.from(document.querySelectorAll('#back .ln'));
           let atLineStart = false;
-          for(const el of document.querySelectorAll('#back .ln')){
+          for(const el of lns){
             const top = Math.round(el.offsetTop);
             if(top >= st - 1){ atLineStart = Math.abs(top - st) <= 1; break; }
           }
-          return winWhole && atLineStart;
+          const cut = lns.some(el => {
+            const top = el.offsetTop, bot = top + el.offsetHeight;
+            return (top > st + 1) && (top < st + t.clientHeight - 1) && (bot > st + t.clientHeight + 1);
+          });
+          return winWhole && atLineStart && !cut;
         })()""")
-        check('книга: страница начинается со строки и окно = целое число строк', bool(aligned))
+        check('книга: страница со строки, окно целое, строки не режутся', bool(aligned))
 
         page.mouse.move(450, 220)
         page.mouse.wheel(0, 400)
