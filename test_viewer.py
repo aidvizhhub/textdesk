@@ -273,6 +273,9 @@ def hello(name: str) -> str:
 ''', encoding='utf-8')
         (root / 'tool.diff').write_text('--- a\n+++ b\n-старая строка\n+новая строка\n общая\n', encoding='utf-8')
         (root / 'empty.md').write_text('', encoding='utf-8')
+        (root / 'search.txt').write_text('яблоко в строке\nгруша и яблоко\nяблоко яблоко\nслива\n'
+                                         + ''.join('строка %d\n' % i for i in range(5, 80))
+                                         + 'слива на последней странице\n', encoding='utf-8')
         page.goto(base + '?file=longline.txt')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.getElementById('t').value.length > 0")
@@ -499,6 +502,63 @@ def hello(name: str) -> str:
                                       len: document.getElementById('t').value.length,
                                       cnt: document.getElementById('cnt').textContent})""")
         check('пустой файл открывается как пустой и без ошибки', emp['len'] == 0 and 'не нашёл' not in emp['target'], str(emp))
+
+        page.goto(base + '?file=search.txt')
+        page.wait_for_function("document.getElementById('t').value.length > 0")
+        page.wait_for_timeout(300)
+        page.keyboard.press('Control+f')
+        page.wait_for_function("!document.getElementById('findwrap').hidden")
+        page.fill('#findin', 'яблоко')
+        page.wait_for_timeout(300)
+        check('поиск: нашёл все совпадения, стоит на первом', page.eval_on_selector('#findcnt', 'el => el.textContent') == '1 / 4',
+              page.eval_on_selector('#findcnt', 'el => el.textContent'))
+        page.press('#findin', 'Enter')
+        page.wait_for_timeout(150)
+        check('поиск: Enter вперёд', page.eval_on_selector('#findcnt', 'el => el.textContent') == '2 / 4',
+              page.eval_on_selector('#findcnt', 'el => el.textContent'))
+        page.press('#findin', 'Shift+Enter')
+        page.wait_for_timeout(150)
+        check('поиск: Shift+Enter назад', page.eval_on_selector('#findcnt', 'el => el.textContent') == '1 / 4',
+              page.eval_on_selector('#findcnt', 'el => el.textContent'))
+        page.keyboard.press('F3')
+        page.wait_for_timeout(150)
+        check('поиск: F3 листает совпадения', page.eval_on_selector('#findcnt', 'el => el.textContent') == '2 / 4',
+              page.eval_on_selector('#findcnt', 'el => el.textContent'))
+        hl = page.evaluate("""() => ({cur: CSS.highlights.get('find-cur') ? CSS.highlights.get('find-cur').size : -1,
+                                      all: CSS.highlights.get('find') ? CSS.highlights.get('find').size : -1,
+                                      line: document.getElementById('back').children[1].offsetTop,
+                                      top: document.getElementById('t').scrollTop})""")
+        check('поиск: совпадения подсвечены, текущее отдельно', hl['cur'] == 1 and hl['all'] >= 1, str(hl))
+        check('поиск: прыжок доводит совпадение в окно', hl['line'] - hl['top'] >= 0, str(hl))
+        page.fill('#findin', 'ЯБЛОКО')
+        page.wait_for_timeout(250)
+        check('поиск: без учёта регистра находит верхним регистром тоже',
+              page.eval_on_selector('#findcnt', 'el => el.textContent').endswith('/ 4'),
+              page.eval_on_selector('#findcnt', 'el => el.textContent'))
+        page.click('#findcase')
+        page.wait_for_timeout(250)
+        check('поиск: Aa включает учёт регистра', page.eval_on_selector('#findcnt', 'el => el.textContent') == 'нет',
+              page.eval_on_selector('#findcnt', 'el => el.textContent'))
+        page.click('#findcase')
+        page.wait_for_timeout(200)
+        page.press('#findin', 'Escape')
+        page.wait_for_timeout(250)
+        esc = page.evaluate("""() => ({hidden: document.getElementById('findwrap').hidden,
+                                       all: CSS.highlights.get('find') ? CSS.highlights.get('find').size : -1})""")
+        check('поиск: Esc закрывает панель и снимает подсветку', esc['hidden'] and esc['all'] == 0, str(esc))
+        page.keyboard.press('Control+f')
+        page.fill('#findin', 'слива на последней')
+        page.wait_for_timeout(250)
+        page.click('#bookbtn')
+        page.wait_for_function("document.body.classList.contains('book')")
+        page.wait_for_timeout(300)
+        before = book_counter(page)
+        page.press('#findin', 'Enter')
+        page.wait_for_timeout(300)
+        after = book_counter(page)
+        check('поиск в книге: прыжок перелистывает на страницу с совпадением', before != after, before + ' -> ' + after)
+        page.click('#bookbtn')
+        page.wait_for_timeout(200)
         page.goto(base + '?file=big.py')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.querySelector('#back .ln .hljs-number') !== null")

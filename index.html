@@ -142,7 +142,13 @@ body.book textarea{margin:var(--bpy) var(--bpx);overflow:hidden}
 body.book #wrapbtn{display:none}
 #navpath{padding:8px 11px;border-bottom:1px solid var(--line)}
 #pathin{width:100%;background:var(--btn);border:1px solid var(--line);border-radius:7px;color:var(--fg);font:inherit;font-size:12.5px;padding:6px 9px;outline:none}
-#pathin:focus{border-color:var(--acc)}
+#findwrap{display:inline-flex;align-items:center;gap:7px}
+#findin{width:min(24ch,34vw);background:var(--btn);border:1px solid var(--line);border-radius:7px;color:var(--fg);font:inherit;font-size:12.5px;padding:5px 8px;outline:none}
+#findin:focus{border-color:var(--acc)}
+#findcnt{color:var(--dim);font-size:12.5px;min-width:6ch}
+#findcase{font-size:12px;padding:4px 7px}
+::highlight(find){background:color-mix(in srgb, var(--acc) 30%, transparent)}
+::highlight(find-cur){background:var(--acc);color:var(--bg)}
 </style>
 <!-- иконки: Rune Icons (github.com/Nexvyn/runeicons), Apache-2.0, стиль normal; stroke -> currentColor -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -157,6 +163,8 @@ body.book #wrapbtn{display:none}
 
 <div class="bar">
   <b><svg class="ic" aria-hidden="true"><use href="#i-file-text"/></svg><span id="fname">demo.md</span></b>
+  <button id="findbtn" title="поиск по файлу (Ctrl+F)">найти</button>
+  <span id="findwrap" hidden><input id="findin" type="text" spellcheck="false" placeholder="искать в файле…"><span id="findcnt"></span><button id="findcase" title="учитывать регистр" aria-pressed="false">Aa</button></span>
   <div class="ctl">
     <div class="seg">
       <button id="minus" title="мельче">A−</button>
@@ -275,6 +283,7 @@ function buildBack(){
   syncScroll();
   upd();
   highlightView();
+  if(findHits.length) scheduleFindPaint();
   if(bookActive()) bookApply(false);
 }
 const wrapbtn = document.getElementById('wrapbtn');
@@ -413,7 +422,7 @@ bookpageInp.addEventListener('keydown', e => {
     bookpageInp.blur();
   }
 });
-area.addEventListener('scroll', () => { syncScroll(); scheduleHighlight(); });
+area.addEventListener('scroll', () => { syncScroll(); scheduleHighlight(); if(findHits.length) scheduleFindPaint(); });
 window.addEventListener('resize', () => { scheduleBack(); if(bookActive()) bookApply(); });
 document.querySelector('.editor').addEventListener('wheel', e => {
   if(e.ctrlKey) return;
@@ -1001,6 +1010,150 @@ window.addEventListener('keydown', e => {
   if(e.key === 'ArrowLeft' || e.key === 'PageUp'){ e.preventDefault(); bookGoto(bookPageN - 1); }
   else if(e.key === 'ArrowRight' || e.key === 'PageDown'){ e.preventDefault(); bookGoto(bookPageN + 1); }
 });
+const findbtn = document.getElementById('findbtn');
+const findwrap = document.getElementById('findwrap');
+const findin = document.getElementById('findin');
+const findcnt = document.getElementById('findcnt');
+const findcase = document.getElementById('findcase');
+let findHits = [], findIdx = -1, findStarts = [0], findCase = false, findPaintPending = false;
+function findLines(){
+  findStarts = [0];
+  const v = area.value;
+  for(let i = 0; i < v.length; i++) if(v.charCodeAt(i) === 10) findStarts.push(i + 1);
+}
+function findLineOf(off){
+  let lo = 0, hi = findStarts.length - 1;
+  while(lo < hi){
+    const mid = (lo + hi + 1) >> 1;
+    if(findStarts[mid] <= off) lo = mid; else hi = mid - 1;
+  }
+  return lo;
+}
+function rangeInLine(el, off, len){
+  const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const stop = off + len;
+  let node, pos = 0, start = null, startOff = 0, end = null, endOff = 0;
+  while((node = w.nextNode())){
+    const l = node.nodeValue.length;
+    if(start === null && off <= pos + l){ start = node; startOff = off - pos; }
+    if(start !== null && stop <= pos + l){ end = node; endOff = stop - pos; break; }
+    pos += l;
+  }
+  if(!start || !end) return null;
+  const r = document.createRange();
+  r.setStart(start, startOff);
+  r.setEnd(end, endOff);
+  return r;
+}
+function paintFind(){
+  findPaintPending = false;
+  if(!window.CSS || !CSS.highlights || typeof Highlight === 'undefined') return;
+  const top = area.scrollTop - area.clientHeight, bot = area.scrollTop + 2 * area.clientHeight;
+  const all = [], cur = [];
+  for(let i = 0; i < findHits.length; i++){
+    const h = findHits[i];
+    const el = back.children[h[0]];
+    if(!el) continue;
+    if(i !== findIdx && !(el.offsetTop + el.offsetHeight > top && el.offsetTop < bot)) continue;
+    const r = rangeInLine(el, h[1], h[2]);
+    if(!r) continue;
+    (i === findIdx ? cur : all).push(r);
+  }
+  CSS.highlights.set('find', new Highlight(...all));
+  CSS.highlights.set('find-cur', new Highlight(...cur));
+}
+function scheduleFindPaint(){
+  if(findPaintPending) return;
+  findPaintPending = true;
+  requestAnimationFrame(paintFind);
+}
+function findClear(){
+  findHits = [];
+  findIdx = -1;
+  findcnt.textContent = '';
+  scheduleFindPaint();
+}
+function findRun(keepIdx){
+  const q = findin.value;
+  if(!q){ findClear(); return; }
+  findLines();
+  const hay = findCase ? area.value : area.value.toLowerCase();
+  const needle = findCase ? q : q.toLowerCase();
+  const hits = [];
+  let i = hay.indexOf(needle);
+  while(i !== -1 && hits.length < 20000){ hits.push(i); i = hay.indexOf(needle, i + needle.length); }
+  findHits = hits.map(o => { const ln = findLineOf(o); return [ln, o - findStarts[ln], q.length]; });
+  if(!findHits.length){ findIdx = -1; findcnt.textContent = 'нет'; scheduleFindPaint(); return; }
+  if(keepIdx && findIdx >= 0){
+    findIdx = Math.min(findIdx, findHits.length - 1);
+  } else {
+    const caret = area.selectionStart || 0;
+    const at = findHits.findIndex(h => findStarts[h[0]] + h[1] >= caret);
+    findIdx = at < 0 ? 0 : at;
+  }
+  findJump();
+}
+function findStep(d){
+  if(!findHits.length){ findRun(false); return; }
+  findIdx = (findIdx + d + findHits.length) % findHits.length;
+  findJump();
+}
+function findJump(){
+  const h = findHits[findIdx];
+  findcnt.textContent = h ? (findIdx + 1) + ' / ' + findHits.length : 'нет';
+  if(h){
+    const el = back.children[h[0]];
+    if(el){
+      if(bookActive()) bookGoto(Math.floor(el.offsetTop / bookRowsPx()) + 1);
+      else {
+        area.scrollTop = Math.max(0, el.offsetTop - Math.round(area.clientHeight / 3));
+        syncScroll();
+      }
+    }
+  }
+  paintFind();
+}
+function findOpen(on){
+  findwrap.hidden = !on;
+  if(on){
+    findin.focus();
+    findin.select();
+    if(findin.value) findRun(true);
+  } else {
+    findClear();
+  }
+}
+findbtn.addEventListener('click', () => findOpen(findwrap.hidden));
+findin.addEventListener('input', () => findRun(true));
+findin.addEventListener('keydown', e => {
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    findStep(e.shiftKey ? -1 : 1);
+  } else if(e.key === 'Escape'){
+    e.preventDefault();
+    findOpen(false);
+    area.focus();
+  }
+});
+findcase.addEventListener('click', () => {
+  findCase = !findCase;
+  findcase.classList.toggle('on', findCase);
+  findcase.setAttribute('aria-pressed', findCase ? 'true' : 'false');
+  if(findin.value) findRun(false);
+});
+window.addEventListener('keydown', e => {
+  if((e.ctrlKey || e.metaKey) && 'fFаА'.indexOf(e.key) !== -1){
+    e.preventDefault();
+    findOpen(true);
+    return;
+  }
+  if(e.key === 'F3'){
+    e.preventDefault();
+    if(findwrap.hidden) findOpen(true); else findStep(e.shiftKey ? -1 : 1);
+  } else if(e.key === 'Escape' && !findwrap.hidden){
+    findOpen(false);
+  }
+}, true);
 if(st.book) bookToggle(true);
 setDirty(false);
 </script>
