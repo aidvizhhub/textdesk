@@ -1,0 +1,13 @@
+[Unit]
+Description=textdesk — локальный веб-редактор текстовых файлов
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/textdesk
+ExecStart=/usr/bin/python3 /path/to/textdesk/serve.py --no-browser
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

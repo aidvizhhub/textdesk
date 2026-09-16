@@ -17,8 +17,10 @@ import webbrowser
 
 HERE = pathlib.Path(__file__).resolve().parent
 PAGE_FILE = HERE / 'index.html'
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8792
-ROOT = pathlib.Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else (HERE.parent.parent if HERE.parent.parent.exists() else HERE.parent)
+NO_BROWSER = '--no-browser' in sys.argv[1:]
+ARGS = [a for a in sys.argv[1:] if a != '--no-browser']
+PORT = int(ARGS[0]) if len(ARGS) > 0 else 8792
+ROOT = pathlib.Path(ARGS[1]).resolve() if len(ARGS) > 1 else (HERE.parent.parent if HERE.parent.parent.exists() else HERE.parent)
 ALLOWED_NAMES = {'Dockerfile', 'Makefile', 'makefile', 'GNUmakefile', '.gitignore', '.dockerignore', '.editorconfig', '.env', '.bashrc', '.zshrc', '.vimrc'}
 ALLOWED_EXT = ('.txt', '.md', '.log', '.py', '.sh', '.bash', '.zsh', '.js', '.mjs', '.cjs',
                '.ts', '.tsx', '.jsx', '.json', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.conf',
@@ -220,8 +222,9 @@ print('корень: %s (%d файлов)' % (ROOT, len(scan_files())), flush=Tr
 url = 'http://127.0.0.1:%d/' % PORT
 print('страница: %s — файл выбирай кнопкой «открыть файл…»' % url, flush=True)
 server = http.server.ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
-try:
-    webbrowser.open(url)
-except Exception:
-    pass
+if not NO_BROWSER:
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
 server.serve_forever()

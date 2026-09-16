@@ -31,6 +31,19 @@ python3 serve.py 8792 /path/to/workspace
 python3 gen.py ../notes.txt        # вшивает notes.txt в index.html как стартовый холст
 ```
 
+## автозапуск (systemd user)
+
+```
+cp contrib/textdesk.service ~/.config/systemd/user/
+sed -i "s|/path/to/textdesk|$(pwd)|g" ~/.config/systemd/user/textdesk.service
+systemctl --user daemon-reload
+systemctl --user enable --now textdesk
+```
+
+логи: `journalctl --user -u textdesk -f`, выключить: `systemctl --user disable --now textdesk`.
+чтобы сервер поднимался до логина (при загрузке системы): `sudo loginctl enable-linger $USER`.
+флаг `--no-browser` в юните гасит автозапуск браузера — при старте вкладки не всплывают.
+
 ## тесты
 
 ```
