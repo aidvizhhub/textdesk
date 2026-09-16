@@ -927,7 +927,9 @@ function pathResolve(raw){
 }
 nav.addEventListener('click', e => { if(e.target === nav) navClose(); });
 nav.addEventListener('wheel', e => {
-  if(!e.target.closest || !e.target.closest('#navlist')) e.preventDefault();
+  if(e.target.closest && e.target.closest('#navlist')) return;   // список листается сам
+  e.preventDefault();
+  navlist.scrollTop += e.deltaY;                                  // модалка сама решает, что скроллить
 }, {passive:false});
 window.addEventListener('keydown', e => {
   if((e.ctrlKey || e.metaKey) && 'pPзЗ'.indexOf(e.key) !== -1){
@@ -938,11 +940,15 @@ window.addEventListener('keydown', e => {
   }
   if(nav.hidden) return;
   const inField = e.target && e.target.tagName === 'INPUT';
-  if(inField && e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Escape') return;
+  if(inField && e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'PageDown' && e.key !== 'PageUp' && e.key !== 'Escape') return;
   const items = navFiltered();
   if(e.key === 'Escape'){ e.preventDefault(); navClose(); }
   else if(e.key === 'ArrowDown'){ e.preventDefault(); navSel = Math.min(items.length - 1, navSel + 1); renderNav(); }
   else if(e.key === 'ArrowUp'){ e.preventDefault(); navSel = Math.max(0, navSel - 1); renderNav(); }
+  else if(e.key === 'PageDown'){ e.preventDefault(); navSel = Math.min(items.length - 1, navSel + 12); renderNav(); }
+  else if(e.key === 'PageUp'){ e.preventDefault(); navSel = Math.max(0, navSel - 12); renderNav(); }
+  else if(e.key === 'Home'){ e.preventDefault(); navSel = 0; renderNav(); }
+  else if(e.key === 'End'){ e.preventDefault(); navSel = Math.max(0, items.length - 1); renderNav(); }
   else if(inField){ /* Enter и Backspace в полях разбирают сами поля */ }
   else if(e.key === 'Enter'){ e.preventDefault(); navActivate(navSel); }
   else if(e.key === 'Backspace'){

@@ -279,6 +279,8 @@ def hello(name: str) -> str:
                                          + ''.join('строка %d\n' % i for i in range(6, 80))
                                          + 'слива на последней странице\n', encoding='utf-8')
         (root / 'search2.txt').write_text('MARKER в другом файле\nвторая строка про сливу\n', encoding='utf-8')
+        for i in range(1, 31):
+            (root / ('pad%02d.txt' % i)).write_text('наполнитель списка %d\n' % i, encoding='utf-8')
         page.goto(base + '?file=longline.txt')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.getElementById('t').value.length > 0")
@@ -748,18 +750,22 @@ def hello(name: str) -> str:
         page.keyboard.press('Control+p')
         page.wait_for_selector('#nav:not([hidden])')
         page.wait_for_timeout(400)
-        page.keyboard.type('11')
+        page.keyboard.type('notes')
         page.wait_for_function("document.querySelectorAll('#navlist .navitem').length === 1"
-                               " && document.querySelector('#navlist .navitem').textContent.includes('11')")
+                               " && document.querySelector('#navlist .navitem').textContent.includes('notes.md')")
         check('обзор: набор имени фильтрует дерево и виден в поле',
-              page.eval_on_selector('#pathin', 'el => el.value') == '11'
+              page.eval_on_selector('#pathin', 'el => el.value') == 'notes'
               and 'фильтр' in page.eval_on_selector('#navcrumbs', 'el => el.textContent'),
               page.eval_on_selector('#navcrumbs', 'el => el.textContent'))
         page.keyboard.press('Enter')
-        page.wait_for_function("document.querySelector('#navcrumbs').textContent.includes('наверх') === false")
+        page.wait_for_function("document.getElementById('fname').textContent === 'notes.md'")
+        page.wait_for_timeout(300)
+        check('обзор: Enter открыл файл из фильтра', page.evaluate('location.search') == '?file=notes.md',
+              repr(page.evaluate('location.search')))
+        page.keyboard.press('Control+p')
+        page.wait_for_selector('#nav:not([hidden])')
         page.wait_for_timeout(400)
-        rows = page.eval_on_selector_all('#navlist .navitem', 'els => els.map(e => e.textContent)')
-        check('обзор: Enter открыл папку из фильтра', any('11.txt' in r for r in rows), str(rows))
+        box = page.locator('#navlist').bounding_box()
         pg_wheel = page.evaluate("""() => {
           window.__wheel = [];
           window.addEventListener('wheel', e => {
@@ -782,18 +788,32 @@ def hello(name: str) -> str:
         page.mouse.wheel(0, 300)
         page.wait_for_timeout(250)
         w2 = page.evaluate("""() => ({ta: Math.round(document.getElementById('t').scrollTop),
+                                      list: Math.round(document.getElementById('navlist').scrollTop),
                                       last: window.__wheel[window.__wheel.length - 1]})""")
         page.mouse.move(20, 700)
         page.mouse.wheel(0, 300)
         page.wait_for_timeout(250)
         w3 = page.evaluate("""() => ({ta: Math.round(document.getElementById('t').scrollTop),
+                                      list: Math.round(document.getElementById('navlist').scrollTop),
                                       last: window.__wheel[window.__wheel.length - 1]})""")
         check('обзор: колесо листает список модалки, а не страницу под ней',
               w2['ta'] == pg_wheel['ta'] and w3['ta'] == pg_wheel['ta']
               and w2['last']['p'] is True and w3['last']['p'] is True
               and (w1['list'] >= pg_wheel['list'] or not pg_wheel['scrollable'])
+              and w2['list'] > pg_wheel['list'] and w3['list'] > w2['list']
               and w1['last']['p'] is False,
               'старт %s, над списком %s, над полями %s, над фоном %s' % (pg_wheel, w1, w2, w3))
+        page.keyboard.press('PageDown')
+        page.wait_for_timeout(200)
+        check('обзор: PageDown листает выбор по списку', page.evaluate("navSel") > 0, str(page.evaluate('navSel')))
+        page.evaluate("document.activeElement.blur()")
+        page.keyboard.press('End')
+        page.wait_for_timeout(200)
+        check('обзор: End уводит выбор в конец списка',
+              page.evaluate("navSel") == page.evaluate("navFiltered().length - 1"), str(page.evaluate('navSel')))
+        page.keyboard.press('Home')
+        page.wait_for_timeout(200)
+        check('обзор: Home возвращает выбор в начало', page.evaluate("navSel") == 0, str(page.evaluate('navSel')))
         page.keyboard.press('Escape')
         page.wait_for_function("document.getElementById('nav').hidden")
         page.keyboard.press('Control+p')
