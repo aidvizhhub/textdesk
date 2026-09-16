@@ -92,7 +92,7 @@ body.book #bookl,body.book #bookr{display:flex}
 #bookl:hover,#bookr:hover{border-color:var(--acc);color:var(--acc)}
 #booknum{color:var(--acc)}
 body.book main{align-items:center;background:color-mix(in srgb, var(--fg) 6%, var(--bg))}
-body.book .editor{flex:none;width:min(64ch,100%);height:var(--book-h,60vh);margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.30)}
+body.book .editor{flex:none;width:min(72ch,100%);height:var(--book-h,60vh);margin:0 auto;line-height:1.75;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.30)}
 body.book #back{left:var(--bpx);top:var(--bpy)}
 body.book textarea{margin:var(--bpy) var(--bpx);overflow:hidden}
 #navpath{padding:8px 11px;border-bottom:1px solid var(--line)}
@@ -762,22 +762,25 @@ function bookLineH(){ return parseFloat(getComputedStyle(area).lineHeight) || 20
 function bookActive(){ return document.body.classList.contains('book'); }
 function bookPageH(){ return bookRowsN * bookLineH(); }
 let bookStarts = [0];
+let bookHeights = [0];
 function bookPadY(){ return parseFloat(getComputedStyle(root).getPropertyValue('--bpy')) || 20; }
 function bookLayout(){
   const rowsPx = bookPageH();
-  const padY = bookPadY();
   const lns = back.children;
-  const top = el => el.offsetTop - padY;
-  const starts = [];
+  const starts = [], heights = [];
   let i = 0;
   while(i < lns.length){
-    starts.push(top(lns[i]));
-    const limit = top(lns[i]) + rowsPx;
+    const startTop = lns[i].offsetTop;
+    const limit = startTop + rowsPx;
     let j = i;
-    while(j < lns.length && top(lns[j]) + lns[j].offsetHeight <= limit + 0.5) j++;
+    while(j < lns.length && lns[j].offsetTop + lns[j].offsetHeight <= limit + 0.5) j++;
+    const last = Math.max(i, j - 1);
+    starts.push(startTop);
+    heights.push(lns[last].offsetTop + lns[last].offsetHeight - startTop);
     i = Math.max(j, i + 1);
   }
   bookStarts = starts.length ? starts : [0];
+  bookHeights = heights.length ? heights : [bookPageH()];
 }
 function bookPages(){ return Math.max(1, bookStarts.length); }
 function bookUpdate(){
@@ -787,23 +790,28 @@ function bookUpdate(){
 function bookTarget(){
   return Math.min(bookStarts[Math.min(bookPageN, bookPages()) - 1], Math.max(0, area.scrollHeight - area.clientHeight));
 }
+function bookShow(){
+  bookPageN = Math.min(Math.max(1, bookPageN), bookPages());
+  const h = (bookHeights[bookPageN - 1] || bookPageH()) + 2 * bookPadY() + 2;
+  root.style.setProperty('--book-h', h + 'px');
+  area.scrollTop = bookTarget();
+  syncScroll();
+  bookUpdate();
+}
 function bookApply(){
   if(!bookActive()) return;
   const lh = bookLineH();
   const mainEl = document.querySelector('main');
   const padY = bookPadY();
   bookRowsN = Math.max(3, Math.floor((mainEl.clientHeight - 2 - 2 * padY) / lh));
-  root.style.setProperty('--book-h', (bookRowsN * lh + 2 * padY + 2) + 'px');
   scheduleBack();
   bookLayout();
   bookPageN = 1;
-  area.scrollTop = bookTarget();
-  bookUpdate();
+  bookShow();
 }
 function bookGoto(n){
   bookPageN = Math.min(Math.max(1, n), bookPages());
-  area.scrollTop = bookTarget();
-  bookUpdate();
+  bookShow();
 }
 function bookToggle(on){
   const to = on === undefined ? !bookActive() : on;

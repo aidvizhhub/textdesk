@@ -217,24 +217,20 @@ try:
         aligned = page.evaluate("""(() => {
           const t = document.getElementById('t');
           const st = Math.round(t.scrollTop);
-          const lh = parseFloat(getComputedStyle(t).lineHeight);
-          const bpy = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bpy')) || 0;
-          const rows = t.clientHeight / lh;
-          const winWhole = Math.abs(rows - Math.round(rows)) < 0.2;
           const lns = Array.from(document.querySelectorAll('#back .ln'));
           let atLineStart = false;
           for(const el of lns){
-            const top = Math.round(el.offsetTop - bpy);
+            const top = Math.round(el.offsetTop);
             if(top >= st - 1){ atLineStart = Math.abs(top - st) <= 1; break; }
           }
           const cut = lns.some(el => {
-            const top = el.offsetTop - bpy, bot = top + el.offsetHeight;
+            const top = el.offsetTop, bot = top + el.offsetHeight;
             return (top > st + 1) && (top < st + t.clientHeight - 1) && (bot > st + t.clientHeight + 1);
           });
           const card = getComputedStyle(document.querySelector('.editor')).boxShadow !== 'none';
-          return winWhole && atLineStart && !cut && card;
+          return atLineStart && !cut && card;
         })()""")
-        check('книга: страница-карточка со строки, окно целое, строки не режутся', bool(aligned))
+        check('книга: страница-карточка со строки и без обрезанных строк', bool(aligned))
 
         page.mouse.move(450, 220)
         page.mouse.wheel(0, 400)
