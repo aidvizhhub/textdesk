@@ -218,21 +218,23 @@ try:
           const t = document.getElementById('t');
           const st = Math.round(t.scrollTop);
           const lh = parseFloat(getComputedStyle(t).lineHeight);
+          const bpy = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bpy')) || 0;
           const rows = t.clientHeight / lh;
           const winWhole = Math.abs(rows - Math.round(rows)) < 0.2;
           const lns = Array.from(document.querySelectorAll('#back .ln'));
           let atLineStart = false;
           for(const el of lns){
-            const top = Math.round(el.offsetTop);
+            const top = Math.round(el.offsetTop - bpy);
             if(top >= st - 1){ atLineStart = Math.abs(top - st) <= 1; break; }
           }
           const cut = lns.some(el => {
-            const top = el.offsetTop, bot = top + el.offsetHeight;
+            const top = el.offsetTop - bpy, bot = top + el.offsetHeight;
             return (top > st + 1) && (top < st + t.clientHeight - 1) && (bot > st + t.clientHeight + 1);
           });
-          return winWhole && atLineStart && !cut;
+          const card = getComputedStyle(document.querySelector('.editor')).boxShadow !== 'none';
+          return winWhole && atLineStart && !cut && card;
         })()""")
-        check('книга: страница со строки, окно целое, строки не режутся', bool(aligned))
+        check('книга: страница-карточка со строки, окно целое, строки не режутся', bool(aligned))
 
         page.mouse.move(450, 220)
         page.mouse.wheel(0, 400)
@@ -244,22 +246,14 @@ try:
         num2 = page.eval_on_selector('#booknum', 'el => el.textContent')
         instant = page.evaluate("""(() => {
           const t = document.getElementById('t');
-          const lh = parseFloat(getComputedStyle(t).lineHeight);
-          const rows = Math.floor((document.querySelector('main').clientHeight - 2) / lh);
-          const pageH = rows * lh;
-          const off = Math.abs(t.scrollTop / pageH - Math.round(t.scrollTop / pageH));
-          return off < 0.001;
+          return Math.abs(t.scrollTop - bookTarget()) < 1;
         })()""")
         check('книга: вправо листает мгновенно', num2.startswith('2 / ') and instant, num2)
         page.evaluate("document.getElementById('t').scrollTop += 40")
         page.wait_for_timeout(150)
         snapped = page.evaluate("""(() => {
           const t = document.getElementById('t');
-          const lh = parseFloat(getComputedStyle(t).lineHeight);
-          const rows = Math.floor((document.querySelector('main').clientHeight - 2) / lh);
-          const pageH = rows * lh;
-          const off = Math.abs(t.scrollTop / pageH - Math.round(t.scrollTop / pageH));
-          return off < 0.001;
+          return Math.abs(t.scrollTop - bookTarget()) < 1;
         })()""")
         check('книга: свободный скролл не пробивает страницу', bool(snapped))
         page.click('#bookl')
