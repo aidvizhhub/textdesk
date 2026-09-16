@@ -74,6 +74,7 @@ main{flex:1;display:flex;width:100%;padding:1.2rem clamp(1rem,4vw,2.6rem) 1.4rem
 .editor{flex:1;display:flex;min-height:0;position:relative;overflow:hidden}
 .editor::before{content:'';position:absolute;left:var(--gut);top:0;bottom:0;width:1px;background:var(--line);z-index:2;pointer-events:none}
 #back{position:absolute;left:0;top:0;overflow:hidden;pointer-events:none;user-select:none;color:var(--fg);white-space:pre-wrap;overflow-wrap:break-word;counter-reset:line;will-change:transform;transform:translate(var(--sx,0px),var(--sy,0px));z-index:0}
+#backw{position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;pointer-events:none}
 body.nowrap #back{white-space:pre}
 body.nowrap #back .ln{white-space:pre}
 #back .ln{position:relative;padding-left:calc(var(--gut) + 1.6rem);counter-increment:line;min-height:1.6em}
@@ -116,8 +117,11 @@ body.book #bookl,body.book #bookr{display:flex}
 #bookpage:focus{border-bottom-color:var(--acc)}
 body.book main{align-items:center;background:color-mix(in srgb, var(--fg) 6%, var(--bg))}
 body.book .editor{flex:none;width:min(78ch,100%);height:var(--book-h,60vh);margin:0 auto;line-height:1.75;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.30)}
-body.book #back{left:var(--bpx);top:var(--bpy)}
+body.book #backw{left:var(--bpx);top:var(--bpy);right:var(--bpx);bottom:var(--bpy)}
+body.book #back{left:0;top:0;width:calc(100% + 2ch) !important}
+body.book #back .ln{padding-left:calc(var(--gut) + 1.6rem + 2ch);text-indent:-2ch}
 body.book textarea{margin:var(--bpy) var(--bpx);overflow:hidden}
+body.book #wrapbtn{display:none}
 #navpath{padding:8px 11px;border-bottom:1px solid var(--line)}
 #pathin{width:100%;background:var(--btn);border:1px solid var(--line);border-radius:7px;color:var(--fg);font:inherit;font-size:12.5px;padding:6px 9px;outline:none}
 #pathin:focus{border-color:var(--acc)}
@@ -156,7 +160,7 @@ body.book textarea{margin:var(--bpy) var(--bpx);overflow:hidden}
 <input id="file" type="file" accept=".txt,.md,.log,.py,.sh,.js,.json,.yml,.yaml,.toml,.ini,.conf,.sql,.html,.css,.c,.h,.cpp,.go,.rs,text/plain" hidden>
 <main>
   <div class="editor">
-    <div id="back" aria-hidden="true"></div>
+    <div id="backw" aria-hidden="true"><div id="back"></div></div>
     <textarea id="t" spellcheck="false" wrap="soft"></textarea>
   </div>
 </main>
@@ -252,9 +256,12 @@ function isCodeName(name){
   const m = /\.([A-Za-z0-9]+)$/.exec((name || '').split('/').pop());
   return !!(m && HL_LANGS[m[1].toLowerCase()]);
 }
-function applyWrap(on){
-  st.wrap = on ? 1 : 0;
-  save();
+function applyWrap(on, keep){
+  if(bookActive()) on = true;
+  if(!keep){
+    st.wrap = on ? 1 : 0;
+    save();
+  }
   area.setAttribute('wrap', on ? 'soft' : 'off');
   document.body.classList.toggle('nowrap', !on);
   wrapbtn.classList.toggle('on', on);
@@ -452,7 +459,7 @@ function setDirty(v){
 
 function loadText(text, name){
   curName = name || '';
-  applyWrap(st.wrap === undefined ? !isCodeName(curName) : !!st.wrap);
+  applyWrap(st.wrap === undefined ? !isCodeName(curName) : !!st.wrap, bookActive());
   area.value = text;
   area.setSelectionRange(0, 0);
   area.scrollTop = 0;
@@ -819,6 +826,7 @@ const bookr = document.getElementById('bookr');
 const booknum = document.getElementById('booknum');
 let bookRowsN = 10;
 let bookPageN = 1;
+let bookWrapWas = true;
 function bookLineH(){ return parseFloat(getComputedStyle(area).lineHeight) || 20; }
 function bookActive(){ return document.body.classList.contains('book'); }
 function bookPageH(){ return bookRowsN * bookLineH(); }
@@ -827,18 +835,33 @@ let bookHeights = [0];
 function bookPadY(){ return parseFloat(getComputedStyle(root).getPropertyValue('--bpy')) || 20; }
 function bookLayout(){
   const rowsPx = bookPageH();
-  const lns = back.children;
+  const lns = back.children, n = lns.length;
   const starts = [], heights = [];
-  let i = 0;
-  while(i < lns.length){
-    const startTop = lns[i].offsetTop;
-    const limit = startTop + rowsPx;
-    let j = i;
-    while(j < lns.length && lns[j].offsetTop + lns[j].offsetHeight <= limit + 0.5) j++;
-    const last = Math.max(i, j - 1);
-    starts.push(startTop);
-    heights.push(lns[last].offsetTop + lns[last].offsetHeight - startTop);
-    i = Math.max(j, i + 1);
+  let i = 0, st = 0;
+  while(i < n){
+    const limit = st + rowsPx;
+    let j = i, h = 0;
+    while(j < n && lns[j].offsetTop + lns[j].offsetHeight <= limit + 0.5){
+      h = lns[j].offsetTop + lns[j].offsetHeight - st;
+      j++;
+    }
+    if(j > i && j < n && lns[j].offsetHeight > rowsPx + 0.5 && lns[j].offsetTop < limit){
+      starts.push(st);                 // к целым строкам подклеиваем кусок строки-монстра,
+      heights.push(rowsPx);            // иначе карточка остаётся недобитой
+      st = limit;
+      i = j;
+      continue;
+    }
+    if(j > i){
+      starts.push(st);
+      heights.push(h);
+      st += h;
+      i = j;
+      continue;
+    }
+    starts.push(st);                   // строка сама длиннее страницы: кусок во всю страницу
+    heights.push(rowsPx);
+    st = limit;
   }
   bookStarts = starts.length ? starts : [0];
   bookHeights = heights.length ? heights : [bookPageH()];
@@ -885,10 +908,14 @@ function bookToggle(on){
   save();
   booknum.hidden = !to;
   if(to){
+    bookWrapWas = !document.body.classList.contains('nowrap');
+    applyWrap(true, true);
+    if(!bookWrapWas) buildBack();
     area.blur();
     bookApply();
   } else {
     root.style.removeProperty('--book-h');
+    if(!bookWrapWas) applyWrap(false);
     scheduleBack();
   }
 }

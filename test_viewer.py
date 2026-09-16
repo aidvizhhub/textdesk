@@ -216,6 +216,64 @@ try:
         page.wait_for_timeout(300)
         check('перенос включается обратно', page.evaluate("document.getElementById('t').getAttribute('wrap') === 'soft' && !document.body.classList.contains('nowrap')"))
 
+        page.click('#wrapbtn')
+        page.wait_for_timeout(250)
+        clipped = page.evaluate("(() => { const l = document.getElementById('back').children[0]; return l.scrollWidth > l.clientWidth + 1; })()")
+        check('перенос выкл: длинная строка вылезает за колонку', bool(clipped))
+        page.click('#bookbtn')
+        page.wait_for_function("document.body.classList.contains('book')")
+        page.wait_for_timeout(400)
+        check('книга: перенос включается сам и кнопка переноса скрыта', page.evaluate(
+            "document.getElementById('t').getAttribute('wrap') === 'soft'"
+            " && !document.body.classList.contains('nowrap')"
+            " && getComputedStyle(document.getElementById('wrapbtn')).display === 'none'"))
+        cardfit = page.evaluate("""(() => {
+          const ed = document.querySelector('.editor'), m = document.querySelector('main');
+          return [Math.round(ed.getBoundingClientRect().height), m.clientHeight];
+        })()""")
+        check('книга: карточка не выше окна (строка длиннее страницы не раздувает карточку)',
+              cardfit[0] <= cardfit[1] + 1, str(cardfit))
+        pages_n = page.evaluate("bookPages()")
+        check('книга: строка длиннее страницы листается куском с полными строками экрана', pages_n > 1, str(pages_n))
+        fits = page.evaluate("(() => { const l = document.getElementById('back').children[0]; return l.scrollWidth <= l.clientWidth + 1; })()")
+        check('книга: длинная строка не обрезается по правому краю', bool(fits))
+        hang = page.evaluate("""(() => {
+          const l = document.getElementById('back').children[0];
+          const r = document.createRange();
+          r.selectNodeContents(l);
+          const rects = Array.from(r.getClientRects());
+          return {rows: rects.length, dx: rects.length > 1 ? Math.round(rects[1].left - rects[0].left) : 0};
+        })()""")
+        check('книга: продолжение строки с отступом', hang['rows'] > 1 and hang['dx'] > 8, str(hang))
+        win = page.evaluate("""(() => {
+          const w = document.getElementById('backw').getBoundingClientRect();
+          const t = document.getElementById('t').getBoundingClientRect();
+          return [Math.round(w.top - t.top), Math.round(w.height - t.height)];
+        })()""")
+        check('книга: окно холста совпадает с полем textarea (нет подгляда соседней строки в поле карточки)',
+              abs(win[0]) <= 1 and abs(win[1]) <= 1, str(win))
+        hs = page.evaluate("[document.getElementById('back').lastElementChild.offsetTop + document.getElementById('back').lastElementChild.offsetHeight, document.getElementById('t').scrollHeight]")
+        check('книга: текст холста не выше textarea (иначе последняя страница режется)', hs[0] <= hs[1], 'холст %d, textarea %d' % tuple(hs))
+        page.evaluate("bookGoto(bookPages())")
+        page.wait_for_timeout(250)
+        lastok = page.evaluate("""(() => {
+          const t = document.getElementById('t'), b = document.getElementById('back');
+          const st = t.scrollTop, vh = t.clientHeight;
+          return Array.from(b.querySelectorAll('.ln')).every(l =>
+            !(l.offsetTop < st + vh - 1 && l.offsetTop + l.offsetHeight > st + 1) ||
+            l.offsetHeight > vh + 1 ||
+            (l.offsetTop >= st - 1 && l.offsetTop + l.offsetHeight <= st + vh + 1));
+        })()""")
+        check('книга: последняя страница не режет строки', bool(lastok))
+        page.click('#bookbtn')
+        page.wait_for_function("!document.body.classList.contains('book')")
+        page.wait_for_timeout(300)
+        check('книга: вне книги отступ продолжений снят', page.evaluate("getComputedStyle(document.getElementById('back').children[0]).textIndent") in ('0px', '0'))
+        check('книга: выход возвращает перенос как было (выкл)', page.evaluate(
+            "document.getElementById('t').getAttribute('wrap') === 'off' && document.body.classList.contains('nowrap')"))
+        page.click('#wrapbtn')
+        page.wait_for_timeout(200)
+
         page.goto(base + '?file=big.py')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.querySelector('#back .ln .hljs-number') !== null")
@@ -348,7 +406,7 @@ try:
         page.fill('#pathin', root_abs + '/11')
         page.press('#pathin', 'Enter')
         page.wait_for_function("document.querySelector('#navcrumbs').textContent.includes('11')")
-        page.wait_for_function("document.querySelectorAll('#navlist .navitem').length >= 1")
+        page.wait_for_function("document.querySelector('#navlist').textContent.includes('11.txt')")
         rows2 = page.eval_on_selector_all('#navlist .navitem', 'els => els.map(e => e.textContent)')
         check('путь: папка открылась в обзоре', any('11.txt' in r for r in rows2), str(rows2))
         outside = pathlib.Path(tempfile.gettempdir()) / ('viewer-outside-%d.txt' % os.getpid())
