@@ -622,7 +622,9 @@ function navActivate(i){
   if(navAbs) loadAbsTree(it.rel);
   else openNav(it.rel);
 }
+let navSeq = 0;
 async function loadTree(dir){
+  const seq = ++navSeq;
   try {
     const r = await fetch('/__tree?dir=' + encodeURIComponent(dir));
     if(!r.ok){
@@ -630,6 +632,7 @@ async function loadTree(dir){
       return;
     }
     const data = await r.json();
+    if(seq !== navSeq) return;
     navAbs = false;
     navDir = data.dir || '';
     if(document.activeElement !== pathin) pathin.value = navDir ? rootPath + '/' + navDir : rootPath;
@@ -674,10 +677,12 @@ async function openAbsFile(abs){
   }
 }
 async function loadAbsTree(abs){
+  const seq = ++navSeq;
   try {
     const r = await fetch('/__dir?path=' + encodeURIComponent(abs));
     if(!r.ok){ navNote('не пускает: ' + abs); return; }
     const data = await r.json();
+    if(seq !== navSeq) return;
     navAbs = true;
     navDir = data.dir || '/';
     navItems = [];

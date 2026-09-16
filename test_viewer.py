@@ -65,6 +65,9 @@ root = pathlib.Path(tempfile.mkdtemp(prefix='viewer-test-'))
 (root / '11' / '11.txt').write_text('старое 11\n', encoding='utf-8')
 (root / 'VPN.md').write_text('старое vpn\n', encoding='utf-8')
 (root / 'tool.py').write_text('import os\nprint(os.name)\n', encoding='utf-8')
+os.chmod(root / 'tool.py', 0o755)
+tool_py = root / 'tool.py'
+ALLOWED_HIDDEN = {'.gitignore', '.dockerignore', '.editorconfig', '.env', '.bashrc', '.zshrc', '.vimrc'}
 (root / 'Dockerfile').write_text('FROM python:3.12\nRUN echo hi\n', encoding='utf-8')
 file11 = root / '11' / '11.txt'
 vpn = root / 'VPN.md'
@@ -180,6 +183,37 @@ try:
         page.wait_for_function("document.getElementById('save').textContent.includes('сохранено')")
         check('кнопка: VPN.md записан', vpn.read_text(encoding='utf-8') == 'vpn pravka')
         check('соседний файл не тронут', file11.read_text(encoding='utf-8') == 'правка из теста')
+
+        page.goto(base + '?file=tool.py')
+        page.wait_for_load_state('networkidle')
+        page.wait_for_function("document.getElementById('t').value.length > 0")
+        page.fill('#t', 'import os\nprint(os.name)\n# правка\n')
+        page.keyboard.press('Control+s')
+        page.wait_for_function("document.getElementById('save').textContent.includes('сохранено')")
+        mode = oct(tool_py.stat().st_mode & 0o7777)
+        leftovers = [p.name for p in root.iterdir() if p.name.startswith('.') and p.name not in ALLOWED_HIDDEN]
+        check('запись атомарная: содержимое и права файла целы', tool_py.read_text(encoding='utf-8').endswith('# правка\n'), 'права ' + mode)
+        check('запись сохранила права 0755 (не сбросила в 0600)', mode == '0o755', mode)
+        check('после записи в папке нет мусорных временных файлов', leftovers == [], str(leftovers))
+        check('запись идёт через os.replace, а не write_bytes',
+              'os.replace(' in (HERE / 'serve.py').read_text(encoding='utf-8')
+              and 'target.write_bytes' not in (HERE / 'serve.py').read_text(encoding='utf-8'))
+
+        (root / 'ro').mkdir(exist_ok=True)
+        (root / 'ro' / 'ro.txt').write_text('не трогать\n', encoding='utf-8')
+        os.chmod(root / 'ro', 0o555)
+        try:
+            page.goto(base + '?file=ro/ro.txt')
+            page.wait_for_load_state('networkidle')
+            page.wait_for_function("document.getElementById('t').value.length > 0")
+            page.fill('#t', 'попытка записи\n')
+            page.keyboard.press('Control+s')
+            page.wait_for_function("document.getElementById('save').textContent.includes('не принял')")
+            check('запись в чужую папку отбита, файл цел',
+                  (root / 'ro' / 'ro.txt').read_text(encoding='utf-8') == 'не трогать\n',
+                  page.eval_on_selector('#save', 'el => el.textContent'))
+        finally:
+            os.chmod(root / 'ro', 0o755)
 
         page.goto(base + '?file=11/11.txt')
         page.wait_for_load_state('networkidle')
@@ -308,6 +342,19 @@ try:
         })()""")
         check('книга: все строки по сетке одной высоты (границы страниц не режут строки)',
               grid['tops'] == 0 and grid['heights'] == 0 and grid['card'], str(grid))
+        page.set_viewport_size({'width': 1100, 'height': 640})
+        page.wait_for_timeout(400)
+        rs = page.evaluate("""(() => {
+          const lns = Array.from(document.querySelectorAll('#back .ln'));
+          const pitch = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--book-lhp'));
+          return {pitch: pitch, bad: lns.filter(l => Math.abs((l.offsetTop / pitch) % 1) > 0.02).length,
+                  card: Math.round(document.querySelector('.editor').getBoundingClientRect().height),
+                  main: document.querySelector('main').clientHeight};
+        })()""")
+        check('книга: после ресайза окна сетка держится, карточка в окне',
+              rs['pitch'] > 0 and rs['bad'] == 0 and rs['card'] <= rs['main'] + 1, str(rs))
+        page.set_viewport_size({'width': 1280, 'height': 720})
+        page.wait_for_timeout(400)
         sep = page.evaluate("""(() => {
           const cs = getComputedStyle(document.querySelector('.editor'), '::before');
           return cs.width + '|' + cs.backgroundColor;
@@ -410,6 +457,22 @@ try:
         page.wait_for_function("document.querySelector('#navlist').textContent.includes('11.txt')")
         rows2 = page.eval_on_selector_all('#navlist .navitem', 'els => els.map(e => e.textContent)')
         check('путь: папка открылась в обзоре', any('11.txt' in r for r in rows2), str(rows2))
+
+        page.evaluate("""() => {
+          const of = window.fetch;
+          window._of = of;
+          window.fetch = (u, o) => u === '/__tree?dir=' ? new Promise(res => setTimeout(() => res(of(u, o)), 500)) : of(u, o);
+        }""")
+        page.keyboard.press('Escape')
+        page.keyboard.press('Control+p')
+        page.wait_for_selector('#nav:not([hidden])')
+        page.fill('#pathin', root_abs + '/11')
+        page.press('#pathin', 'Enter')
+        page.wait_for_timeout(1100)
+        rows3 = page.eval_on_selector_all('#navlist .navitem', 'els => els.map(e => e.textContent)')
+        page.evaluate("window.fetch = window._of")
+        check('навигатор: ответ корня, пришедший позже, не перетирает открытую папку',
+              any('11.txt' in r for r in rows3), str(rows3))
         outside = pathlib.Path(tempfile.gettempdir()) / ('viewer-outside-%d.txt' % os.getpid())
         outside.write_text('внешний файл, только чтение\n', encoding='utf-8')
         page.fill('#pathin', str(outside))
@@ -455,6 +518,21 @@ try:
         page.click('#theme')
         page.wait_for_timeout(300)
         check('file:// тема переключается', body_bg(page) != bg_file)
+        page.click('#bookbtn')
+        page.wait_for_function("document.body.classList.contains('book')")
+        page.wait_for_timeout(300)
+        check('file:// книга включается на статичной странице',
+              page.eval_on_selector('#bookbtn', 'el => el.classList.contains("on")')
+              and not page.eval_on_selector('#booknum', 'el => el.hidden'))
+        fgrid = page.evaluate("""(() => {
+          const lns = Array.from(document.querySelectorAll('#back .ln'));
+          const pitch = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--book-lhp'));
+          return {pitch: pitch, bad: lns.filter(l => Math.abs((l.offsetTop / pitch) % 1) > 0.02).length,
+                  card: Math.round(document.querySelector('.editor').getBoundingClientRect().height),
+                  main: document.querySelector('main').clientHeight};
+        })()""")
+        check('file:// книга: строки по сетке, карточка в окне',
+              fgrid['pitch'] > 0 and fgrid['bad'] == 0 and fgrid['card'] <= fgrid['main'] + 1, str(fgrid))
 
         browser.close()
 

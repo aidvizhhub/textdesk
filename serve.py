@@ -12,6 +12,7 @@ import json
 import os
 import pathlib
 import sys
+import tempfile
 import urllib.parse
 import webbrowser
 
@@ -208,9 +209,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(413)
             return
         data = self.rfile.read(length)
+        tmp = None
         try:
-            target.write_bytes(data)
+            fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix='.' + target.name + '.', suffix='.tmp')
+            with os.fdopen(fd, 'wb') as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            st = None
+            try:
+                st = target.stat()
+            except OSError:
+                pass
+            if st:
+                os.chmod(tmp, st.st_mode & 0o7777)
+                try:
+                    os.chown(tmp, st.st_uid, st.st_gid)
+                except OSError:
+                    pass
+            os.replace(tmp, target)
         except OSError:
+            if tmp:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
             self.send_error(500)
             return
         print('saved %s (%d байт)' % (target, len(data)))
