@@ -293,6 +293,8 @@ try:
 
 Абзац с **жирным**, *курсивом*, `инлайн-кодом` и [ссылкой](https://example.com/page).
 
+[вглубь](deep/canon.md) — соседний файл.
+
 ![схема](pic.png)
 
 ![пропажа](missing.png)
@@ -538,6 +540,37 @@ def hello(name: str) -> str:
               'missing.png' in (pv['miss'] or '') and 'пропажа' in (pv['miss'] or ''), str(pv['miss']))
         check('просмотр md: сырой html и javascript: не выполняются',
               pv['xss'] == 'undefined' and not pv['script'] and not pv['jsHref'], str(pv))
+        lk = page.evaluate("""() => { const a = document.querySelector('#view a[data-rel]');
+            return a ? {rel: a.getAttribute('data-rel'), href: a.getAttribute('href'), tgt: a.getAttribute('target')} : null; }""")
+        check('ссылка на соседний файл получает внутренний адрес и не уходит в новую вкладку сама',
+              lk and lk['rel'] == '11/deep/canon.md' and '?file=' in lk['href'] and lk['tgt'] is None, str(lk))
+        page.click('#view a[data-rel]')
+        page.wait_for_function("document.getElementById('t').value.startsWith('# глубокий')")
+        opened = page.evaluate("""() => ({preview: document.body.classList.contains('preview'),
+                                         h: document.querySelector('#view h1') ? document.querySelector('#view h1').textContent : '',
+                                         url: location.search})""")
+        check('клик по ссылке открывает файл в этой же вкладке, просмотр перерисовывается',
+              opened['preview'] and opened['h'] == 'глубокий' and opened['url'] == '?file=11/deep/canon.md', str(opened))
+        page.goto(base + '?file=11/canon.md')
+        page.wait_for_function("document.getElementById('t').value.startsWith('# Заголовок первый')")
+        page.click('#viewbtn')
+        page.wait_for_function("document.body.classList.contains('preview')")
+        with page.expect_popup() as pop:
+            page.click('#view a[data-rel]', modifiers=['Control'])
+        pup = pop.value
+        pup.wait_for_load_state()
+        check('Ctrl+клик открывает ссылку в новой вкладке вьювера', '?file=11/deep/canon.md' in pup.url, pup.url)
+        pup.close()
+        (root / 'long.md').write_text('# длинный\n\n' + 'строка текста для прокрутки\n' * 200, encoding='utf-8')
+        page.goto(base + '?file=long.md')
+        page.wait_for_function("document.getElementById('t').value.length > 1000")
+        page.click('#viewbtn')
+        page.wait_for_function("document.body.classList.contains('preview')")
+        page.hover('#view')
+        page.mouse.wheel(0, 500)
+        page.wait_for_timeout(250)
+        sc = page.evaluate("document.getElementById('view').scrollTop")
+        check('колесо мыши скроллит просмотр markdown', sc > 0, 'scrollTop=' + str(sc))
         page.click('#viewbtn')
         page.wait_for_timeout(200)
         back_clean = page.evaluate("""() => ({preview: document.body.classList.contains('preview'),
@@ -645,6 +678,11 @@ def hello(name: str) -> str:
                                        target: document.getElementById('target').textContent})""")
         check('локальная картинка из системного пикера показывается blob-ссылкой',
               lm['src'].startswith('blob:') and 'локальный.png' in lm['target'], str(lm))
+        rr = page.evaluate("""() => ({pic: resolveRel('pic.png'), ext: resolveRel('https://example.com/a.md'),
+                                       anchor: resolveRel('#x'), miss: resolveRel('no/such/file.md')})""")
+        check('у локального файла картинки и ссылки ищутся по уникальному хвосту в корне',
+              rr['pic'] == '/11/pic.png' and rr['ext'] == 'https://example.com/a.md'
+              and rr['anchor'] == '#x' and rr['miss'] == 'no/such/file.md', str(rr))
         page.evaluate("delete window.showOpenFilePicker")
 
         page.goto(base + '?file=11/pic.png')

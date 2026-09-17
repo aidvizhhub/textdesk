@@ -49,6 +49,7 @@ VIEW_EXT = ALLOWED_EXT + MEDIA_EXT   # что показываем в списк
 MAX_BODY = 32 * 1024 * 1024
 MAX_VIEW = 2 * 1024 * 1024
 SKIP_DIRS = ('/proc', '/sys', '/dev')
+MAX_LIST_DEPTH = 3   # на сколько папок вглубь смотрит /__list (11/textdesk/docs/*.png должны быть видны)
 OK_ORIGINS = {'http://127.0.0.1:%d' % PORT, 'http://localhost:%d' % PORT}
 
 
@@ -57,7 +58,7 @@ def scan_files(media=False):
     found = []
     for dirpath, dirnames, filenames in os.walk(ROOT):
         rel = pathlib.Path(dirpath).relative_to(ROOT)
-        dirnames[:] = [d for d in dirnames if not d.startswith('.') and len(rel.parts) < 2]
+        dirnames[:] = [d for d in dirnames if not d.startswith('.') and len(rel.parts) < MAX_LIST_DEPTH]
         for f in filenames:
             if (not f.startswith('.') or f in ALLOWED_NAMES) and (pathlib.Path(f).suffix.lower() in exts or f in ALLOWED_NAMES):
                 found.append((pathlib.Path(dirpath) / f).relative_to(ROOT).as_posix())

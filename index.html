@@ -472,6 +472,7 @@ area.addEventListener('scroll', () => { syncScroll(); scheduleHighlight(); if(fi
 window.addEventListener('resize', () => { scheduleBack(); if(bookActive()) bookApply(); });
 document.querySelector('.editor').addEventListener('wheel', e => {
   if(e.ctrlKey) return;
+  if(document.body.classList.contains('preview')) return;   // в просмотре скроллит сам просмотр
   if(mediaOn && !rawOn) return;   // колесо над картинкой зумит, а не мотает скрытый текст
   if(bookActive()){ e.preventDefault(); return; }
   if(e.target === area) return;
@@ -591,6 +592,18 @@ if(MD){
 }
 const viewbtn = document.getElementById('viewbtn');
 const view = document.getElementById('view');
+function hrefFor(rel){ return '/?file=' + encodeURIComponent(rel).replace(/%2F/g, '/'); }
+function resolveRel(u){
+  if(!u || /^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(u)) return u;
+  const tail = u.split('#')[0].split('?')[0];
+  if(serverTarget){
+    const dir = serverTarget.includes('/') ? serverTarget.split('/').slice(0, -1).join('/') + '/' : '';
+    return '/' + dir + u;
+  }
+  if(!tail || tail.indexOf('..') !== -1) return u;
+  const hits = serverFiles.filter(p => p === tail || p.endsWith('/' + tail));
+  return hits.length === 1 ? '/' + hits[0] + u.slice(tail.length) : u;
+}
 function setPreview(on){
   const can = !!on && !!MD && isMdName(curName) && !bookActive();
   document.body.classList.toggle('preview', can);
@@ -604,11 +617,18 @@ function setPreview(on){
   updateHint();
   if(can){
     view.innerHTML = MD.render(area.value || '');
-    const dir = serverTarget ? '/' + (serverTarget.includes('/') ? serverTarget.split('/').slice(0, -1).join('/') + '/' : '') : '';
-    if(dir) for(const el of view.querySelectorAll('img[src],a[href]')){
-      const attr = el.tagName === 'IMG' ? 'src' : 'href';
-      const u = el.getAttribute(attr) || '';
-      if(u && !/^([a-z][a-z0-9+.-]*:|\/|#)/i.test(u)) el.setAttribute(attr, dir + u);
+    for(const el of view.querySelectorAll('img[src],a[href]')){
+      const isImg = el.tagName === 'IMG';
+      const u = el.getAttribute(isImg ? 'src' : 'href') || '';
+      const r = resolveRel(u);
+      if(!r || r === u) continue;
+      if(isImg){
+        el.setAttribute('src', r);
+      } else {
+        el.setAttribute('href', hrefFor(r.replace(/^\//, '')));
+        el.setAttribute('data-rel', r.replace(/^\//, ''));
+        el.removeAttribute('target');
+      }
     }
     for(const im of view.querySelectorAll('img')){
       const miss = () => {
@@ -630,6 +650,33 @@ function updateViewBtn(){
   if(!can && document.body.classList.contains('preview')) setPreview(false);
 }
 viewbtn.addEventListener('click', () => setPreview(!document.body.classList.contains('preview')));
+view.addEventListener('click', e => {
+  const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+  if(!a || !view.contains(a)) return;
+  const href = a.getAttribute('href') || '';
+  if(a.dataset.rel){
+    e.preventDefault();
+    if(e.ctrlKey || e.metaKey) window.open(hrefFor(a.dataset.rel), '_blank');
+    else openServerFile(a.dataset.rel);
+    return;
+  }
+  if(!href || /^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(href)) return;
+  e.preventDefault();
+  if(href.startsWith('/')){
+    const rel = decodeURI(href.replace(/^\//, '').split('#')[0]);
+    if(e.ctrlKey || e.metaKey) window.open(hrefFor(rel), '_blank');
+    else openServerFile(rel);
+  } else {
+    setStatus('нет такого файла в корне: ' + href, 4000);
+  }
+});
+view.addEventListener('auxclick', e => {
+  if(e.button !== 1) return;
+  const a = e.target && e.target.closest ? e.target.closest('a[data-rel]') : null;
+  if(!a) return;
+  e.preventDefault();
+  window.open(hrefFor(a.dataset.rel), '_blank');
+});
 function esc(s){
   return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 }
@@ -668,6 +715,7 @@ function loadText(text, name){
   scheduleBack();
   upd();
   updateHint();
+  if(document.body.classList.contains('preview')) setPreview(true);
   if(pendingFind){
     const pf = pendingFind;
     pendingFind = null;
