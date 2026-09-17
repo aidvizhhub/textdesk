@@ -574,10 +574,16 @@ def hello(name: str) -> str:
               pick['navHidden'] and 'файлов с таким именем' in pick['target'] and '11/canon.md' in pick['title'], str(pick))
         page.evaluate("""() => {
           window.__wrote = null;
+          window.__asked = null;
+          let first = true;
           window.showOpenFilePicker = async () => [{
             name: 'локальный.md',
             getFile: async () => new File(['# локальный файл\\n'], 'локальный.md', {type: 'text/markdown'}),
-            createWritable: async () => ({write: async t => { window.__wrote = t; }, close: async () => {}}),
+            createWritable: async () => {
+              if(first){ first = false; throw new DOMException('нужно разрешение', 'NotAllowedError'); }
+              return {write: async t => { window.__wrote = t; }, close: async () => {}};
+            },
+            requestPermission: async o => { window.__asked = o && o.mode; return 'granted'; },
           }];
         }""")
         page.click('#open')
@@ -594,6 +600,8 @@ def hello(name: str) -> str:
         wrote = page.evaluate("window.__wrote")
         check('Ctrl+S пишет прямо в локальный файл через File System Access API, без сервера',
               wrote == '# правка локального\n', str(wrote))
+        asked = page.evaluate("window.__asked")
+        check('доступ на запись просится только на сохранении и в режиме readwrite', asked == 'readwrite', str(asked))
         page.evaluate("delete window.showOpenFilePicker")
         hnd = page.evaluate("""() => new Promise(async res => {
           try {

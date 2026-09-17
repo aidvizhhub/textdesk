@@ -138,6 +138,7 @@ body.hint .editor::before{display:none}
 .hintcard{position:absolute;left:0;right:0;top:38%;text-align:center;color:var(--dim);font-size:13px;line-height:1.7}
 .hintcard b{display:block;color:var(--fg);font-weight:600;font-size:14px;margin-bottom:var(--s1)}
 .hintcard kbd{font:inherit;background:var(--btn);border:1px solid var(--line);border-radius:var(--r1);padding:1px 5px}
+.hintcard button{font:inherit;color:var(--fg);background:var(--btn);border:1px solid var(--line);border-radius:var(--r1);padding:2px 10px;cursor:pointer}
 body.preview .editor::before{display:none}
 #view > *:first-child{margin-top:0}
 #view h1,#view h2,#view h3,#view h4,#view h5,#view h6{line-height:1.25;margin:1.5em 0 .5em;font-weight:600}
@@ -547,6 +548,7 @@ const serverFiles = [];
 let serverMode = false;
 let serverTarget = null;
 let readonlyPath = null;
+let pendingHandle = null;   // прошлый локальный файл, которому после F5 нужен доступ: карточка предложит «вернуться»
 let rootPath = '';
 let loadError = '';
 let loadToken = 0;
@@ -636,6 +638,9 @@ function updateHint(){
   card.className = 'hintcard';
   if(loadError){
     card.innerHTML = '<b>' + esc(loadError) + '</b><span>проверь путь или открой другой файл — «файлы» <kbd>Ctrl+P</kbd> или «открыть файл…»</span>';
+  } else if(pendingHandle){
+    card.innerHTML = '<b>прошлый локальный файл: ' + esc(pendingHandle.name || '') + '</b><span>после перезагрузки браузер закрыл к нему доступ — <button id="retbtn">вернуться</button></span>';
+    card.querySelector('#retbtn').addEventListener('click', regainLocal);
   } else {
     card.innerHTML = '<b>файл не открыт</b><span>выбери файл в обозревателе — «файлы» <kbd>Ctrl+P</kbd>, или открой локальный кнопкой «открыть файл…»' +
                      (document.getElementById('navbtn').hidden ? '; живой редактор запускается через <kbd>serve.py</kbd>' : '') + '</span>';
@@ -698,10 +703,21 @@ async function saveFile(){
     if(!area.value.trim() && !confirm('текст пустой — затереть файл?')) return;
     saveBtn.disabled = true;
     savelbl.textContent = 'сохраняю…';
-    try {
+    const put = async () => {
       const w = await localHandle.createWritable();
       await w.write(area.value);
       await w.close();
+    };
+    try {
+      try {
+        await put();
+      } catch(e){
+        if(!e || e.name !== 'NotAllowedError') throw e;
+        let perm = 'denied';
+        try { perm = await localHandle.requestPermission({mode: 'readwrite'}); } catch(_){}
+        if(perm !== 'granted') throw e;
+        await put();
+      }
       saved();
     } catch(e){
       savelbl.textContent = 'локальный файл не принял';
@@ -1130,7 +1146,6 @@ window.addEventListener('keydown', e => {
 
 const fileInput = document.getElementById('file');
 let localHandle = null;
-let pendingHandle = null;
 let idb = null;
 function idbOpen(){
   return new Promise(res => {
@@ -1185,13 +1200,6 @@ async function openHandle(h){
   return true;
 }
 async function pickLocal(){
-  if(pendingHandle){
-    try {
-      const perm = await pendingHandle.requestPermission({mode: 'readwrite'});
-      if(perm === 'granted'){ await openHandle(pendingHandle); pendingHandle = null; return; }
-    } catch(e){}
-    pendingHandle = null;
-  }
   if(!window.showOpenFilePicker){ fileInput.click(); return; }
   try {
     const [h] = await window.showOpenFilePicker({multiple: false});
@@ -1200,18 +1208,34 @@ async function pickLocal(){
     if(!e || e.name !== 'AbortError') setStatus('файл не открылся: ' + ((e && e.message) || 'ошибка'), 4000);
   }
 }
+async function regainLocal(){
+  const h = pendingHandle;
+  if(!h) return;
+  pendingHandle = null;
+  let perm = 'denied';
+  try { perm = await h.requestPermission({mode: 'read'}); } catch(e){}
+  if(perm !== 'granted'){
+    handleForget();
+    setStatus('доступ к ' + (h.name || 'файлу') + ' не дали — открой его заново кнопкой «открыть файл…»', 5000);
+    updateHint();
+    return;
+  }
+  try {
+    await openHandle(h);
+  } catch(e){
+    handleForget();
+    setStatus('локальный файл не открылся: ' + ((e && e.message) || 'ошибка'), 5000);
+  }
+  updateHint();
+}
 async function reopenLocal(){
   const h = await handleLoad();
   if(!h || !h.queryPermission) return;
   let perm = 'prompt';
-  try { perm = await h.queryPermission({mode: 'readwrite'}); } catch(e){ return; }
+  try { perm = await h.queryPermission({mode: 'read'}); } catch(e){ return; }
   if(perm === 'granted'){ await openHandle(h); return; }
-  if(perm === 'prompt'){
-    pendingHandle = h;
-    setStatus('прошлый локальный файл: ' + h.name + ' — нажми «открыть файл…», браузер спросит доступ', 0);
-  } else {
-    handleForget();
-  }
+  if(perm === 'prompt'){ pendingHandle = h; updateHint(); return; }
+  handleForget();
 }
 document.getElementById('open').addEventListener('click', () => pickLocal());
 fileInput.addEventListener('change', async () => {
