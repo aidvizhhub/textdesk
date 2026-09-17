@@ -605,6 +605,14 @@ def hello(name: str) -> str:
                                       card: document.querySelector('.hintcard') ? document.querySelector('.hintcard').textContent : null})""")
         check('битый путь: сказано, что такой файл есть в другом месте',
               'есть: notes.md' in tw['target'] and 'есть: notes.md' in (tw['card'] or ''), str(tw))
+        page.goto(base + '?file=deep/canon.md')
+        page.wait_for_function("document.getElementById('t').value.length > 0")
+        page.wait_for_timeout(600)
+        sfx = page.evaluate("""() => ({fname: document.getElementById('fname').textContent,
+                                       url: location.search,
+                                       card: document.querySelector('.hintcard') ? document.querySelector('.hintcard').textContent : null})""")
+        check('путь без начала (только хвост) открывается по уникальному концу, адрес исправляется сам',
+              sfx['fname'] == 'canon.md' and sfx['url'] == '?file=11/deep/canon.md' and sfx['card'] is None, str(sfx))
         page.goto(base + '?file=11/11.txt')
         page.wait_for_function("document.getElementById('fname').textContent === '11.txt'")
         page.keyboard.press('Control+p')

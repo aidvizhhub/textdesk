@@ -1141,9 +1141,14 @@ function openServerFile(rel){
       } catch(e2){}
       if(token !== loadToken) return;
     }
-    const twins = serverFiles.filter(p => p.split('/').pop() === base && p !== rel).slice(0, 3);
-    loadError = (String(e.message) === '404' ? 'не нашёл: ' : 'не прочитал: ') + rel
-              + (twins.length ? ' — такой файл есть: ' + twins.join(', ') : '');
+    if(String(e.message) === '404'){
+      const suffix = serverFiles.filter(p => p.endsWith('/' + rel));
+      if(suffix.length === 1){ openServerFile(suffix[0]); return; }   // путь без папки — ищем уникальный хвост
+      const twins = serverFiles.filter(p => p.split('/').pop() === base && p !== rel).slice(0, 3);
+      loadError = 'не нашёл: ' + rel + (twins.length ? ' — такой файл есть: ' + twins.join(', ') : '');
+    } else {
+      loadError = 'не прочитал: ' + rel;
+    }
     loadText('', base);
     setDirty(dirty);
   });
