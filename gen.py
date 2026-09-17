@@ -1286,6 +1286,52 @@ async function handleForget(){
     if(db) db.transaction('kv', 'readwrite').objectStore('kv').delete('lastHandle');
   } catch(e){}
 }
+async function idbPut(key, val){
+  try {
+    const db = await idbOpen();
+    if(db) db.transaction('kv', 'readwrite').objectStore('kv').put(val, key);
+  } catch(e){}
+}
+async function idbGet(key){
+  try {
+    const db = await idbOpen();
+    if(!db) return null;
+    return await new Promise(res => {
+      const rq = db.transaction('kv', 'readonly').objectStore('kv').get(key);
+      rq.onsuccess = () => res(rq.result || null);
+      rq.onerror = () => res(null);
+    });
+  } catch(e){ return null; }
+}
+async function idbDel(key){
+  try {
+    const db = await idbOpen();
+    if(db) db.transaction('kv', 'readwrite').objectStore('kv').delete(key);
+  } catch(e){}
+}
+async function regainHandle(h){
+  let perm = 'granted';
+  try { perm = await h.queryPermission({mode: 'read'}); } catch(e){ return openHandle(h); }
+  if(perm !== 'granted'){
+    try { perm = await h.requestPermission({mode: 'read'}); } catch(e){ perm = 'denied'; }
+  }
+  if(perm !== 'granted'){
+    pendingHandle = h;
+    setStatus('доступ к ' + (h.name || 'файлу') + ' не дали — вернись кнопкой в карточке', 5000);
+    updateHint();
+    return false;
+  }
+  pendingHandle = null;
+  return openHandle(h);
+}
+async function restoreLocalTab(id, name){
+  const h = await idbGet('h:' + id);
+  if(!h){
+    setStatus('локальный файл ' + name + ' после перезагрузки не вернуть — открой заново', 5000);
+    return false;
+  }
+  return regainHandle(h);
+}
 async function openLocalFile(file){
   if(!confirmLeave()) return false;
   serverTarget = null;
@@ -1573,7 +1619,8 @@ try {
 const tabStoreKey = 'textdesk-tabs:' + tabWin;
 function tabPersist(){
   try {
-    sessionStorage.setItem(tabStoreKey, JSON.stringify({list: tabs.map(t => ({key: t.key, name: t.name})), active: tabActive}));
+    const list = tabs.filter(t => t.keep !== false).map(t => ({key: t.key, name: t.name}));
+    sessionStorage.setItem(tabStoreKey, JSON.stringify({list, active: tabActive}));
   } catch(e){}
 }
 let tabSaved = null;   // снимок до первого tabPersist, иначе ?file= успевает перезаписать список
@@ -1586,6 +1633,7 @@ function tabRestore(files){
   for(const it of saved.list.slice(-12)){
     if(!it || typeof it.key !== 'string') continue;
     if(it.key.indexOf('abs:') === 0) made.push({key: it.key, name: it.name, reopen: () => openServerFile(it.key.slice(4))});
+    else if(it.key.indexOf('local:') === 0) made.push({key: it.key, name: it.name, reopen: () => restoreLocalTab(it.key.slice(6), it.name)});
     else if(it.key.indexOf(':') === -1 && files.indexOf(it.key) !== -1) made.push({key: it.key, name: it.name, reopen: () => openServerFile(it.key)});
   }
   if(!made.length) return;
@@ -1624,10 +1672,10 @@ function tabRender(){
     tabsEl.append(el);
   }
 }
-function tabAdd(key, name, reopen){
+function tabAdd(key, name, reopen, keep){
   let t = tabs.find(t => t.key === key);
-  if(!t){ t = {key, name: name || key, reopen}; tabs.push(t); }
-  else t.reopen = reopen;
+  if(!t){ t = {key, name: name || key, reopen, keep: keep !== false}; tabs.push(t); }
+  else { t.reopen = reopen; if(keep !== false) t.keep = true; }
   if(tabs.length > 12) tabs.splice(0, tabs.length - 12);
   tabActive = key;
   tabRender();
@@ -1637,14 +1685,22 @@ function tabOpen(rel, name){
   if(rel) tabAdd(rel, name || rel.split('/').pop(), () => openServerFile(rel));
 }
 function tabOpenLocal(name, handle, file){
-  tabAdd('local:' + name, name, () => { if(handle) openHandle(handle); else openLocalFile(file); });
+  const same = tabs.find(t => t.key.indexOf('local:') === 0 && t.name === name);
+  const id = same ? same.key.slice(6) : ('l' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5));
+  if(handle){
+    idbPut('h:' + id, handle);
+    tabAdd('local:' + id, name, () => regainHandle(handle), true);
+  } else {
+    tabAdd('local:' + id, name, () => openLocalFile(file), false);   // File живёт только в этой странице
+  }
 }
 function tabOpenAbs(abs){
   tabAdd('abs:' + abs, abs.split('/').filter(Boolean).pop(), () => openServerFile(abs));
 }
 function tabActivate(key){
   const t = tabs.find(t => t.key === key);
-  if(!t || t.key === tabActive) return;
+  if(!t) return;
+  if(t.key === tabActive && t.key.indexOf('local:') !== 0) return;   // активную локальную можно передёрнуть
   t.reopen();
 }
 function tabOpenSaved(){
@@ -1658,6 +1714,7 @@ function tabClose(key){
   if(i < 0) return;
   const wasActive = key === tabActive;
   if(wasActive && !confirmLeave()) return;
+  if(key.indexOf('local:') === 0) idbDel('h:' + key.slice(6));
   tabs.splice(i, 1);
   if(wasActive){
     const next = tabs[Math.max(0, i - 1)];

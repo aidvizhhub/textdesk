@@ -755,13 +755,15 @@ def hello(name: str) -> str:
         check('локальный файл из системного пикера открывается и помечен как локальный',
               'локальный файл' in loc and 'локальный.md' in loc, loc)
         ltab = page.evaluate("() => (document.querySelector('#tabs .tab.on') || {dataset: {}}).dataset.key")
-        check('локальный файл сходу получает внутреннюю вкладку', ltab == 'local:локальный.md', str(ltab))
+        lname = page.evaluate("() => document.querySelector('#tabs .tab.on .nm').textContent")
+        check('локальный файл сходу получает внутреннюю вкладку',
+              isinstance(ltab, str) and ltab.startswith('local:') and lname == 'локальный.md', str(ltab) + ' ' + lname)
         page.evaluate("() => openServerFile('11/canon.md')")
         page.wait_for_function("document.getElementById('t').value.startsWith('# Заголовок первый')")
-        page.click("#tabs .tab[data-key='local:локальный.md']")
+        page.click("#tabs .tab[data-key='%s']" % ltab)
         page.wait_for_function("document.getElementById('t').value === '# локальный файл\\n'")
         check('клик по вкладке локального файла возвращает его по дескриптору',
-              page.evaluate("() => (document.querySelector('#tabs .tab.on') || {dataset: {}}).dataset.key") == 'local:локальный.md', '')
+              page.evaluate("() => (document.querySelector('#tabs .tab.on') || {dataset: {}}).dataset.key") == ltab, ltab)
         check('локальный документ не оставляет в памяти серверный путь', '"file":""' in mem, mem)
         page.fill('#t', '# правка локального\n')
         page.keyboard.press('Control+s')
@@ -784,6 +786,18 @@ def hello(name: str) -> str:
         })""")
         check('дескриптор локального файла уходит в IndexedDB (мок без clone — значит пусто, но не падает)',
               hnd in ('пусто', 'нет базы', 'исключение: DataCloneError' ), hnd)
+        page.reload()
+        page.wait_for_timeout(900)
+        lok = page.evaluate("""() => ({names: [...document.querySelectorAll('#tabs .tab .nm')].map(e => e.textContent),
+                                      on: (document.querySelector('#tabs .tab.on') || {dataset: {}}).dataset.key,
+                                      keys: [...document.querySelectorAll('#tabs .tab')].map(e => e.dataset.key)})""")
+        check('локальная вкладка переживает F5 списком',
+              any(n == 'локальный.md' for n in lok['names']) and len(lok['keys']) >= 2, str(lok))
+        page.click("#tabs .tab[data-key='%s']" % [k for k in lok['keys'] if k.startswith('local:')][0])
+        page.wait_for_timeout(400)
+        stloc = page.evaluate("document.getElementById('target').textContent")
+        check('без клонируемого дескриптора вкладка честно говорит, что файл надо открыть заново',
+              'не вернуть' in stloc, stloc)
 
         page.evaluate("""() => {
           window.showOpenFilePicker = async () => [{
