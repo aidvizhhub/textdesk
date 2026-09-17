@@ -571,6 +571,46 @@ def hello(name: str) -> str:
         page.wait_for_timeout(250)
         sc = page.evaluate("document.getElementById('view').scrollTop")
         check('колесо мыши скроллит просмотр markdown', sc > 0, 'scrollTop=' + str(sc))
+        # вкладки открытых файлов: клик — в текущей, средний клик и крестик — закрыть
+        page.goto(base + '?file=11/canon.md')
+        page.wait_for_function("document.getElementById('t').value.startsWith('# Заголовок первый')")
+        page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 1")
+        page.click('#viewbtn')
+        page.wait_for_function("document.body.classList.contains('preview')")
+        page.click('#view a[data-rel]')
+        page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 2")
+        tb = page.evaluate("""() => ({n: document.querySelectorAll('#tabs .tab').length,
+                                      rels: [...document.querySelectorAll('#tabs .tab')].map(e => e.dataset.rel),
+                                      on: (document.querySelector('#tabs .tab.on') || {dataset: {}}).dataset.rel})""")
+        check('каждая открытая ссылка даёт вкладку, активная подсвечена',
+              tb['n'] == 2 and tb['rels'] == ['11/canon.md', '11/deep/canon.md'] and tb['on'] == '11/deep/canon.md', str(tb))
+        page.click("#tabs .tab[data-rel='11/canon.md']")
+        page.wait_for_function("location.search === '?file=11/canon.md' && document.getElementById('t').value.startsWith('# Заголовок первый')")
+        check('клик по вкладке открывает файл в этой же вкладке браузера',
+              page.evaluate("document.querySelector('#tabs .tab.on').dataset.rel") == '11/canon.md', page.url)
+        page.click("#tabs .tab[data-rel='11/deep/canon.md']", button='middle')
+        page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 1")
+        check('средний клик закрывает вкладку',
+              page.evaluate("document.querySelector('#tabs .tab.on').dataset.rel") == '11/canon.md', '')
+        page.goto(base + '?file=11/canon.md')
+        page.wait_for_function("document.getElementById('t').value.startsWith('# Заголовок первый')")
+        page.click('#viewbtn')
+        page.wait_for_function("document.body.classList.contains('preview')")
+        page.click('#view a[data-rel]')
+        page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 2")
+        page.click('#tabs .tab.on .x')
+        page.wait_for_function("location.search === '?file=11/canon.md' && document.querySelectorAll('#tabs .tab').length === 1")
+        check('крестик закрывает активную вкладку и открывает соседнюю', True, page.url)
+        pv2 = page.evaluate("""() => { const v = document.getElementById('view'); const p = v.querySelector('p');
+            return {pad: parseFloat(getComputedStyle(v).paddingLeft), w: p ? Math.round(p.getBoundingClientRect().width) : 0,
+                    x: p ? Math.round(p.getBoundingClientRect().left) : 0}; }""")
+        check('просмотр md: поля и читаемая колонка, текст не липнет к краю',
+              pv2['pad'] >= 16 and 0 < pv2['w'] <= 1010 and pv2['x'] >= 16, str(pv2))
+        page.reload()
+        page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 1 && document.querySelector('#tabs .tab.on')")
+        check('вкладки переживают перезагрузку', True, '')
+        page.click('#viewbtn')
+        page.wait_for_function("document.body.classList.contains('preview')")
         page.click('#viewbtn')
         page.wait_for_timeout(200)
         back_clean = page.evaluate("""() => ({preview: document.body.classList.contains('preview'),

@@ -139,7 +139,17 @@ body.media #media{display:block}
 #mvid{position:absolute;inset:0;margin:auto;max-width:100%;max-height:100%}
 #mzoom{position:absolute;right:12px;bottom:10px;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:var(--r1);padding:2px 8px;pointer-events:none}
 #rawbtn{margin-left:auto;font-size:12.5px;color:var(--dim)}
-#view{display:none;position:absolute;inset:0;overflow:auto;padding:0 0 2rem;line-height:1.6}
+#tabs{display:flex;gap:2px;align-items:flex-end;padding:4px 8px 0;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;flex:0 0 auto}
+#tabs::-webkit-scrollbar{height:0}
+.tab{display:inline-flex;align-items:center;gap:8px;max-width:24ch;padding:4px 6px 5px 10px;border:1px solid transparent;border-bottom:0;border-radius:var(--r1) var(--r1) 0 0;color:var(--dim);font-size:12.5px;line-height:1.5;white-space:nowrap;cursor:pointer;user-select:none}
+.tab:hover{color:var(--fg);background:var(--btn)}
+.tab.on{color:var(--fg);background:var(--bg);border-color:var(--line)}
+.tab .nm{overflow:hidden;text-overflow:ellipsis}
+.tab .x{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:4px;font-size:13px;opacity:0}
+.tab:hover .x,.tab.on .x{opacity:.55}
+.tab .x:hover{opacity:1;background:var(--btn)}
+#view{display:none;position:absolute;inset:0;overflow:auto;padding:0 clamp(20px,5vw,64px) 3rem;line-height:1.6}
+#view>*{max-width:1000px;margin-left:auto;margin-right:auto}
 body.preview #view{display:block}
 body.hint #view{display:block}
 body.hint #back,body.hint #backw,body.hint textarea{display:none}
@@ -239,6 +249,7 @@ body.book #wrapbtn{display:none}
   </div>
 </div>
 <input id="file" type="file" accept=".txt,.md,.log,.py,.sh,.js,.json,.yml,.yaml,.toml,.ini,.conf,.sql,.html,.css,.c,.h,.cpp,.go,.rs,text/plain,image/*,video/*" hidden>
+<div id="tabs" hidden></div>
 <div id="stale" hidden><span>на сервере новая версия textdesk</span><button id="stalereload">обновить</button></div>
 <main>
   <div class="editor">
@@ -1129,6 +1140,7 @@ async function openAbsFile(abs){
     readonlyPath = abs;
     serverTarget = null;
     loadText(txt, abs.split('/').filter(Boolean).pop());
+    tabBlur();
     target.textContent = 'только чтение: ' + abs;
     navClose();
     return true;
@@ -1275,6 +1287,7 @@ async function openHandle(h){
     save();
     const u = URL.createObjectURL(file);
     showMedia(h.name, u, u);
+    tabBlur();
     setStatus('локальный файл: ' + h.name + ' — просмотр, правки не пишутся', 5000);
     target.title = h.name;
     handleSave(h);
@@ -1347,6 +1360,7 @@ fileInput.addEventListener('change', async () => {
     save();
     const u = URL.createObjectURL(f);
     showMedia(f.name, u, u);
+    tabBlur();
     setStatus('локальный файл: ' + f.name + ' — просмотр, записать некуда', 5000);
     return;
   }
@@ -1522,6 +1536,89 @@ window.addEventListener('keydown', e => {
   else if(e.key === '-' || e.key === '_'){ e.preventDefault(); mediaZoomAt(mediaZ / 1.25, r.width / 2, r.height / 2); }
   else if(e.key === '0'){ e.preventDefault(); mediaFit(); }
 });
+const tabsEl = document.getElementById('tabs');
+const tabs = [];
+let tabActive = '';
+function tabRender(){
+  tabsEl.hidden = !tabs.length;
+  tabsEl.textContent = '';
+  for(const t of tabs){
+    const el = document.createElement('div');
+    el.className = 'tab' + (t.rel === tabActive ? ' on' : '');
+    el.dataset.rel = t.rel;
+    el.title = t.rel + ' — клик: открыть, средний клик: закрыть';
+    const nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = t.name;
+    const x = document.createElement('span');
+    x.className = 'x';
+    x.textContent = '\u00d7';
+    x.title = 'закрыть';
+    el.append(nm, x);
+    el.addEventListener('click', e => {
+      if(e.target === x){ tabClose(t.rel); return; }
+      tabActivate(t.rel);
+    });
+    el.addEventListener('auxclick', e => {
+      if(e.button !== 1) return;
+      e.preventDefault();
+      tabClose(t.rel);
+    });
+    tabsEl.append(el);
+  }
+}
+function tabSave(){
+  st.tabs = tabs.map(t => t.rel);
+  st.tab = tabActive;
+  save();
+}
+function tabOpen(rel, name){
+  if(!rel) return;
+  const t = tabs.find(t => t.rel === rel);
+  if(!t) tabs.push({rel, name: name || rel.split('/').pop()});
+  if(tabs.length > 12) tabs.splice(0, tabs.length - 12);
+  tabActive = rel;
+  tabSave();
+  tabRender();
+}
+function tabBlur(){
+  tabActive = '';
+  tabSave();
+  tabRender();
+}
+function tabRestore(files){
+  if(!Array.isArray(st.tabs)) return;
+  for(const rel of st.tabs.slice(-12)){
+    if(files.indexOf(rel) !== -1 && !tabs.some(t => t.rel === rel)) tabs.push({rel, name: rel.split('/').pop()});
+  }
+  tabRender();
+}
+function tabActivate(rel){
+  if(!rel || rel === tabActive) return;
+  openServerFile(rel);
+}
+function tabClose(rel){
+  const i = tabs.findIndex(t => t.rel === rel);
+  if(i < 0) return;
+  const wasActive = rel === tabActive;
+  if(wasActive && !confirmLeave()) return;
+  tabs.splice(i, 1);
+  if(wasActive){
+    const next = tabs[Math.max(0, i - 1)];
+    tabActive = '';
+    st.file = next ? next.rel : '';
+    tabSave();
+    if(next){ openServerFile(next.rel); return; }
+    serverTarget = null;
+    readonlyPath = null;
+    loadError = '';
+    loadText('', '');
+    setDirty(false);
+  } else {
+    tabSave();
+  }
+  tabRender();
+}
 function openServerFile(rel){
   if(!rel) return;
   if(!confirmLeave()) return;
@@ -1537,6 +1634,7 @@ function openServerFile(rel){
     st.navdir = rel.indexOf('/') >= 0 ? rel.replace(/\/[^/]*$/, '') : '';
     save();
     showMedia(rel.split('/').pop(), '/' + rel.split('/').map(encodeURIComponent).join('/'));
+    tabOpen(rel);
     return;
   }
   fetch('/' + rel).then(r => {
@@ -1550,6 +1648,7 @@ function openServerFile(rel){
     st.navdir = rel.indexOf('/') >= 0 ? rel.replace(/\/[^/]*$/, '') : '';
     save();
     loadText(txt, rel.split('/').pop());
+    tabOpen(rel);
   }).catch(async e => {
     if(token !== loadToken) return;
     serverTarget = null;
@@ -1575,6 +1674,7 @@ function openServerFile(rel){
     }
     loadText('', base);
     setDirty(dirty);
+    tabBlur();
   });
 }
 
@@ -1594,6 +1694,7 @@ async function initServer(){
     rootPath = (data && data.root) || '';
     serverFiles.length = 0;
     serverFiles.push(...files);
+    tabRestore(files);
     if(serverTarget){
       // уже открывается по ?file= или старой памяти
     } else if(fileParam){
