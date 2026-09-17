@@ -138,7 +138,7 @@ body.media #media{display:block}
 #mimg.drag{cursor:grabbing}
 #mvid{position:absolute;inset:0;margin:auto;max-width:100%;max-height:100%}
 #mzoom{position:absolute;right:12px;bottom:10px;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:var(--r1);padding:2px 8px;pointer-events:none}
-#artbtn{margin-left:auto;font-size:12.5px;color:var(--dim)}
+#rawbtn{margin-left:auto;font-size:12.5px;color:var(--dim)}
 #view{display:none;position:absolute;inset:0;overflow:auto;padding:0 0 2rem;line-height:1.6}
 body.preview #view{display:block}
 body.hint #view{display:block}
@@ -257,7 +257,7 @@ body.book #wrapbtn{display:none}
     <div id="navlist"></div>
   </div>
 </div>
-<div class="stat"><span id="target"></span><span id="pos"></span><span id="cnt"></span><span id="booknum" hidden><input id="bookpage" type="text" inputmode="numeric" value="1" title="номер страницы — введи и жми Enter"> / <span id="booktotal"></span></span><button id="artbtn" hidden title="читать картинку символами, а не изображением">символы</button></div>
+<div class="stat"><span id="target"></span><span id="pos"></span><span id="cnt"></span><span id="booknum" hidden><input id="bookpage" type="text" inputmode="numeric" value="1" title="номер страницы — введи и жми Enter"> / <span id="booktotal"></span></span><button id="rawbtn" hidden title="читать файл текстом, как блокнот читает jpeg">текст</button></div>
 <script src="hljs.min.js"></script>
 <script src="mdit.min.js"></script>
 <script>
@@ -293,7 +293,7 @@ applyFs();
 const area = document.getElementById('t');
 const back = document.getElementById('back');
 let curName = '';
-let mediaOn = false, artOn = false, mediaZ = 1, mediaX = 0, mediaY = 0, mediaURL = null, mediaDrag = null;
+let mediaOn = false, rawOn = false, mediaZ = 1, mediaX = 0, mediaY = 0, mediaURL = null, mediaSrc = '', mediaDrag = null;
 const pos = document.getElementById('pos');
 const cnt = document.getElementById('cnt');
 const httpMode = /^https?:$/.test(location.protocol);
@@ -302,8 +302,8 @@ function upd(){
   const v = area.value;
   const total = v.split('\n').length;
   if(mediaOn){
-    pos.textContent = artOn ? 'картинка символами' : (isVideoName(curName) ? 'видео' : 'картинка');
-    if(!artOn) cnt.textContent = '';
+    pos.textContent = rawOn ? 'картинка текстом' : (isVideoName(curName) ? 'видео' : 'картинка');
+    if(!rawOn) cnt.textContent = '';
   } else if(document.body.classList.contains('preview')){
     pos.textContent = 'просмотр';
   } else {
@@ -326,7 +326,7 @@ function syncScroll(){
 }
 let backStale = false;
 function buildBack(){
-  if(document.body.classList.contains('preview') || (mediaOn && !artOn)){ backStale = true; return; }   // холст скрыт, ширина textarea = 0
+  if(document.body.classList.contains('preview') || (mediaOn && !rawOn)){ backStale = true; return; }   // холст скрыт, ширина textarea = 0
   const lines = area.value.split('\n');
   const digits = Math.max(3, String(lines.length).length + 1);
   const gut = 'calc(' + digits + 'ch + 1.7rem)';
@@ -489,7 +489,7 @@ area.addEventListener('scroll', () => { syncScroll(); scheduleHighlight(); if(fi
 window.addEventListener('resize', () => { scheduleBack(); if(bookActive()) bookApply(); });
 document.querySelector('.editor').addEventListener('wheel', e => {
   if(e.ctrlKey) return;
-  if(mediaOn && !artOn) return;   // колесо над картинкой зумит, а не мотает скрытый текст
+  if(mediaOn && !rawOn) return;   // колесо над картинкой зумит, а не мотает скрытый текст
   if(bookActive()){ e.preventDefault(); return; }
   if(e.target === area) return;
   e.preventDefault();
@@ -572,7 +572,7 @@ function canWrite(){ return !!serverTarget; }
 function targetText(){
   if(loadError) return loadError;
   if(mediaOn){
-    if(artOn) return 'только просмотр: картинка символами — кнопка «картинка» вернёт изображение';
+    if(rawOn) return 'только просмотр: картинка текстом — кнопка «картинка» вернёт изображение';
     if(isVideoName(curName)) return 'только просмотр: видео';
     return 'только просмотр: картинка — колесо зумит, двойной клик вписывает';
   }
@@ -1325,63 +1325,51 @@ const mediaPane = document.getElementById('media');
 const mimg = document.getElementById('mimg');
 const mvid = document.getElementById('mvid');
 const mzoomEl = document.getElementById('mzoom');
-const artbtn = document.getElementById('artbtn');
-function artChars(img, cols){
-  const rows = Math.max(1, Math.round(cols * img.naturalHeight / img.naturalWidth * 0.5));
-  const c = document.createElement('canvas');
-  c.width = cols; c.height = rows;
-  const ctx = c.getContext('2d');
-  ctx.drawImage(img, 0, 0, cols, rows);
-  const d = ctx.getImageData(0, 0, cols, rows).data;
-  const ramp = ' .:-=+*#%@';
-  const light = document.documentElement.classList.contains('light');
-  const out = [];
-  for(let y = 0; y < rows; y++){
-    let line = '';
-    for(let x = 0; x < cols; x++){
-      const i = (y * cols + x) * 4;
-      const a = d[i + 3] / 255;
-      const lum = ((0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255) * a + (light ? 1 - a : 0);
-      line += ramp[Math.min(ramp.length - 1, Math.round((light ? 1 - lum : lum) * (ramp.length - 1)))];
-    }
-    out.push(line);
-  }
-  return out.join('\n') + '\n';
-}
-function showArt(){
-  if(!mediaOn || !mimg.naturalWidth) return;
-  const cols = Math.max(40, Math.min(200, Math.floor(mediaPane.clientWidth / 7)));
+const rawbtn = document.getElementById('rawbtn');
+const RAW_MAX = 1000000;
+async function showRaw(){
+  if(!mediaOn || !mediaSrc) return;
+  let txt = '';
   try {
-    area.value = artChars(mimg, cols);
+    const r = await fetch(mediaSrc, {cache: 'no-store'});
+    if(!r.ok) throw new Error(r.status);
+    txt = await r.text();
   } catch(e){
-    setStatus('картинку символами не прочитать', 4000);
+    setStatus('не прочитать файл текстом: ' + ((e && e.message) || 'ошибка'), 4000);
     return;
   }
-  artOn = true;
+  const cut = txt.length > RAW_MAX;
+  if(cut) txt = txt.slice(0, RAW_MAX);
+  if(!confirmLeave()) return;
+  rawOn = true;
+  area.readOnly = true;
   document.body.classList.remove('media');
+  area.value = txt;
   area.setSelectionRange(0, 0);
   area.scrollTop = 0;
   setDirty(false);
   scheduleBack();
   upd();
   updateHint();
-  artbtn.textContent = 'картинка';
+  rawbtn.textContent = 'картинка';
+  if(cut) setStatus('показаны первые ' + RAW_MAX.toLocaleString('ru-RU') + ' символов', 4000);
 }
 function showImage(){
   if(bookActive()) bookToggle(false);
-  artOn = false;
+  rawOn = false;
+  area.readOnly = false;
   document.body.classList.add('media');
   area.value = '';
   setDirty(false);
   upd();
   updateHint();
-  artbtn.textContent = 'символы';
+  rawbtn.textContent = 'текст';
 }
-function artToggle(){
+function rawToggle(){
   if(!mediaOn) return;
-  if(artOn) showImage(); else showArt();
+  if(rawOn) showImage(); else showRaw();
 }
-artbtn.addEventListener('click', artToggle);
+rawbtn.addEventListener('click', rawToggle);
 function isMediaName(name){ return /\.(png|jpe?g|gif|webp|avif|bmp|ico|mp4|webm|mov|m4v|ogv)$/i.test(name || ''); }
 function isVideoName(name){ return /\.(mp4|webm|mov|m4v|ogv)$/i.test(name || ''); }
 function mediaApply(){
@@ -1412,9 +1400,11 @@ function mediaOff(){
   mimg.removeAttribute('src');
   mimg.hidden = true;
   mzoomEl.hidden = true;
-  artOn = false;
-  artbtn.hidden = true;
-  artbtn.textContent = 'символы';
+  rawOn = false;
+  area.readOnly = false;
+  rawbtn.hidden = true;
+  rawbtn.textContent = 'текст';
+  mediaSrc = '';
   mediaDrag = null;
   if(mediaURL){ URL.revokeObjectURL(mediaURL); mediaURL = null; }
 }
@@ -1437,9 +1427,10 @@ function showMedia(name, url, blob){
     mimg.src = url;
     mzoomEl.hidden = false;
   }
-  artOn = false;
-  artbtn.hidden = isVideoName(name);
-  artbtn.textContent = 'символы';
+  rawOn = false;
+  rawbtn.hidden = isVideoName(name);
+  rawbtn.textContent = 'текст';
+  mediaSrc = url;
   setDirty(dirty);
   updateHint();
   upd();
@@ -1624,7 +1615,7 @@ function bookGoto(n){
 }
 function bookToggle(on){
   const to = on === undefined ? !bookActive() : on;
-  if(mediaOn && !artOn && to) return;
+  if(mediaOn && !rawOn && to) return;
   document.body.classList.toggle('book', to);
   updateViewBtn();
   bookbtn.classList.toggle('on', to);
