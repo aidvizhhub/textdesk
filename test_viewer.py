@@ -584,8 +584,10 @@ def hello(name: str) -> str:
         page.wait_for_function("document.getElementById('t').value === '# локальный файл\\n'")
         page.wait_for_timeout(300)
         loc = page.evaluate("() => document.getElementById('target').textContent")
+        mem = page.evaluate("localStorage.getItem('txtviewer') || '{}'")
         check('локальный файл из системного пикера открывается и помечен как локальный',
               'локальный файл' in loc and 'локальный.md' in loc, loc)
+        check('локальный документ не оставляет в памяти серверный путь', '"file":""' in mem, mem)
         page.fill('#t', '# правка локального\n')
         page.keyboard.press('Control+s')
         page.wait_for_function("document.getElementById('save').textContent.includes('сохранено')")
@@ -593,6 +595,18 @@ def hello(name: str) -> str:
         check('Ctrl+S пишет прямо в локальный файл через File System Access API, без сервера',
               wrote == '# правка локального\n', str(wrote))
         page.evaluate("delete window.showOpenFilePicker")
+        hnd = page.evaluate("""() => new Promise(async res => {
+          try {
+            const db = await new Promise(r => { const q = indexedDB.open('textdesk', 1);
+              q.onupgradeneeded = () => q.result.createObjectStore('kv'); q.onsuccess = () => r(q.result); q.onerror = () => r(null); });
+            if(!db) return res('нет базы');
+            const rq = db.transaction('kv', 'readonly').objectStore('kv').get('lastHandle');
+            rq.onsuccess = () => res(rq.result ? 'сохранён' : 'пусто');
+            rq.onerror = () => res('ошибка чтения');
+          } catch(e){ res('исключение: ' + e.message); }
+        })""")
+        check('дескриптор локального файла уходит в IndexedDB (мок без clone — значит пусто, но не падает)',
+              hnd in ('пусто', 'нет базы', 'исключение: DataCloneError' ), hnd)
 
         vv = urllib.request.urlopen(base + '__version').read().decode('utf-8').strip()
         check('сервер отдаёт версию страницы для проверки устаревания', len(vv) > 5 and '-' in vv, vv)

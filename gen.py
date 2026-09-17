@@ -536,6 +536,7 @@ async function checkVersion(){
 window.addEventListener('focus', checkVersion);
 setInterval(checkVersion, 300000);
 checkVersion();
+setTimeout(() => { if(!fileParam && !st.file && !serverTarget) reopenLocal(); }, 800);
 
 const saveBtn = document.getElementById('save');
 const savelbl = document.getElementById('savelbl');
@@ -1129,23 +1130,87 @@ window.addEventListener('keydown', e => {
 
 const fileInput = document.getElementById('file');
 let localHandle = null;
+let pendingHandle = null;
+let idb = null;
+function idbOpen(){
+  return new Promise(res => {
+    if(idb) return res(idb);
+    try {
+      const r = indexedDB.open('textdesk', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => { idb = r.result; res(idb); };
+      r.onerror = () => res(null);
+    } catch(e){ res(null); }
+  });
+}
+async function handleSave(h){
+  try {
+    const db = await idbOpen();
+    if(!db) return;
+    db.transaction('kv', 'readwrite').objectStore('kv').put(h, 'lastHandle');
+  } catch(e){}
+}
+async function handleLoad(){
+  try {
+    const db = await idbOpen();
+    if(!db) return null;
+    return await new Promise(res => {
+      const rq = db.transaction('kv', 'readonly').objectStore('kv').get('lastHandle');
+      rq.onsuccess = () => res(rq.result || null);
+      rq.onerror = () => res(null);
+    });
+  } catch(e){ return null; }
+}
+async function handleForget(){
+  try {
+    const db = await idbOpen();
+    if(db) db.transaction('kv', 'readwrite').objectStore('kv').delete('lastHandle');
+  } catch(e){}
+}
+async function openHandle(h){
+  const file = await h.getFile();
+  if(file.size > 32 * 1024 * 1024){ setStatus('файл больше 32МБ — не открою', 4000); return false; }
+  const txt = await file.text();
+  if(!confirmLeave()) return false;
+  localHandle = h;
+  serverTarget = null;
+  readonlyPath = null;
+  loadError = '';
+  st.file = '';
+  save();
+  loadText(txt, h.name);
+  setStatus('локальный файл: ' + h.name + ' — Ctrl+S пишет прямо в него');
+  target.title = h.name;
+  handleSave(h);
+  return true;
+}
 async function pickLocal(){
+  if(pendingHandle){
+    try {
+      const perm = await pendingHandle.requestPermission({mode: 'readwrite'});
+      if(perm === 'granted'){ await openHandle(pendingHandle); pendingHandle = null; return; }
+    } catch(e){}
+    pendingHandle = null;
+  }
   if(!window.showOpenFilePicker){ fileInput.click(); return; }
   try {
     const [h] = await window.showOpenFilePicker({multiple: false});
-    const file = await h.getFile();
-    if(file.size > 32 * 1024 * 1024){ target.textContent = 'файл больше 32МБ — не открою'; return; }
-    const txt = await file.text();
-    if(!confirmLeave()) return;
-    localHandle = h;
-    serverTarget = null;
-    readonlyPath = null;
-    loadError = '';
-    loadText(txt, h.name);
-    setStatus('локальный файл: ' + h.name + ' — Ctrl+S пишет прямо в него');
-    target.title = h.name;
+    await openHandle(h);
   } catch(e){
     if(!e || e.name !== 'AbortError') setStatus('файл не открылся: ' + ((e && e.message) || 'ошибка'), 4000);
+  }
+}
+async function reopenLocal(){
+  const h = await handleLoad();
+  if(!h || !h.queryPermission) return;
+  let perm = 'prompt';
+  try { perm = await h.queryPermission({mode: 'readwrite'}); } catch(e){ return; }
+  if(perm === 'granted'){ await openHandle(h); return; }
+  if(perm === 'prompt'){
+    pendingHandle = h;
+    setStatus('прошлый локальный файл: ' + h.name + ' — нажми «открыть файл…», браузер спросит доступ', 0);
+  } else {
+    handleForget();
   }
 }
 document.getElementById('open').addEventListener('click', () => pickLocal());
@@ -1177,6 +1242,7 @@ function openServerFile(rel){
   if(!rel) return;
   if(!confirmLeave()) return;
   localHandle = null;
+  handleForget();
   const token = loadToken;
   serverTarget = rel;
   setDirty(dirty);
