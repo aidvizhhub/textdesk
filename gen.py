@@ -132,6 +132,12 @@ textarea::selection{background:var(--sel)}
 body.preview #back,body.preview #backw,body.preview textarea{display:none}
 #view{display:none;position:absolute;inset:0;overflow:auto;padding:0 0 2rem;line-height:1.6}
 body.preview #view{display:block}
+body.hint #view{display:block}
+body.hint #back,body.hint #backw,body.hint textarea{display:none}
+body.hint .editor::before{display:none}
+.hintcard{position:absolute;left:0;right:0;top:38%;text-align:center;color:var(--dim);font-size:13px;line-height:1.7}
+.hintcard b{display:block;color:var(--fg);font-weight:600;font-size:14px;margin-bottom:var(--s1)}
+.hintcard kbd{font:inherit;background:var(--btn);border:1px solid var(--line);border-radius:var(--r1);padding:1px 5px}
 body.preview .editor::before{display:none}
 #view > *:first-child{margin-top:0}
 #view h1,#view h2,#view h3,#view h4,#view h5,#view h6{line-height:1.25;margin:1.5em 0 .5em;font-weight:600}
@@ -178,6 +184,8 @@ body.book #wrapbtn{display:none}
 #findin:focus{border-color:var(--acc)}
 #findcnt{color:var(--dim);font-size:12.5px;min-width:6ch}
 #findcase{font-size:12px;padding:var(--s1) var(--s2)}
+#cplbl{display:none}
+#cp.ok #cplbl{display:inline}
 ::highlight(find){background:color-mix(in srgb, var(--acc) 30%, transparent)}
 ::highlight(find-cur){background:var(--acc);color:var(--bg)}
 </style>
@@ -214,7 +222,7 @@ body.book #wrapbtn{display:none}
     <button id="bookbtn" title="режим книги: страницы влево-вправо">книга</button>
     <button id="save" title="записать правки обратно в файл (Ctrl+S)"><svg class="ic" aria-hidden="true"><use href="#i-save"/></svg><span id="savelbl">сохранить</span></button>
     <span class="sep" aria-hidden="true"></span>
-    <button id="cp"><svg class="ic" aria-hidden="true"><use id="cpuse" href="#i-copy"/></svg><span id="cplbl">копировать весь текст</span></button>
+    <button id="cp" title="скопировать весь текст в буфер"><svg class="ic" aria-hidden="true"><use id="cpuse" href="#i-copy"/></svg><span id="cplbl">копировать весь текст</span></button>
   </div>
 </div>
 <input id="file" type="file" accept=".txt,.md,.log,.py,.sh,.js,.json,.yml,.yaml,.toml,.ini,.conf,.sql,.html,.css,.c,.h,.cpp,.go,.rs,text/plain" hidden>
@@ -578,6 +586,24 @@ function updateViewBtn(){
   if(!can && document.body.classList.contains('preview')) setPreview(false);
 }
 viewbtn.addEventListener('click', () => setPreview(!document.body.classList.contains('preview')));
+function esc(s){
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+function updateHint(){
+  const empty = !area.value && !bookActive() && (!curName || loadError);
+  document.body.classList.toggle('hint', empty);
+  if(!empty) return;
+  const card = document.createElement('div');
+  card.className = 'hintcard';
+  if(loadError){
+    card.innerHTML = '<b>' + esc(loadError) + '</b><span>проверь путь или открой другой файл — «файлы» <kbd>Ctrl+P</kbd> или «открыть файл…»</span>';
+  } else {
+    card.innerHTML = '<b>файл не открыт</b><span>выбери файл в обозревателе — «файлы» <kbd>Ctrl+P</kbd>, или открой локальный кнопкой «открыть файл…»' +
+                     (document.getElementById('navbtn').hidden ? '; живой редактор запускается через <kbd>serve.py</kbd>' : '') + '</span>';
+  }
+  view.textContent = '';
+  view.append(card);
+}
 function loadText(text, name){
   loadToken++;
   curName = name || '';
@@ -593,6 +619,7 @@ function loadText(text, name){
   setDirty(false);
   scheduleBack();
   upd();
+  updateHint();
   if(pendingFind){
     const pf = pendingFind;
     pendingFind = null;

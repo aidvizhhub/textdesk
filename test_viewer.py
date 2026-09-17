@@ -534,9 +534,21 @@ def hello(name: str) -> str:
         page.wait_for_timeout(1200)
         miss = page.evaluate("""() => ({target: document.getElementById('target').textContent,
                                        fname: document.getElementById('fname').textContent,
+                                       hint: document.body.classList.contains('hint'),
+                                       card: document.querySelector('.hintcard') ? document.querySelector('.hintcard').textContent : null,
                                        len: document.getElementById('t').value.length})""")
         check('ненайденный файл говорит об этом, а не молчит пустым полем',
               'не нашёл' in miss['target'] and miss['fname'] == 'no-such-file-xyz.md', str(miss))
+        check('ненайденный файл: в рабочей зоне карточка с ошибкой и что делать',
+              miss['hint'] and 'не нашёл' in (miss['card'] or '') and 'Ctrl+P' in (miss['card'] or ''), str(miss['card']))
+        page.evaluate("localStorage.removeItem('txtviewer')")
+        page.goto(base)
+        page.wait_for_function("document.querySelector('.hintcard') !== null")
+        empty_hint = page.evaluate("""() => ({hint: document.body.classList.contains('hint'),
+                                              card: document.querySelector('.hintcard') ? document.querySelector('.hintcard').textContent : null})""")
+        check('без файла: рабочая зона объясняет, с чего начать',
+              empty_hint['hint'] and 'файл не открыт' in (empty_hint['card'] or '') and 'Ctrl+P' in (empty_hint['card'] or ''),
+              str(empty_hint['card']))
         page.goto(base + '?file=empty.md')
         page.wait_for_timeout(1000)
         emp = page.evaluate("""() => ({target: document.getElementById('target').textContent,
