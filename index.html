@@ -655,21 +655,49 @@ area.addEventListener('input', () => {
   setDirty(true);
 });
 
+let statusTimer = 0;
+function setStatus(msg, ms){
+  clearTimeout(statusTimer);
+  target.textContent = msg;
+  if(!ms) return;
+  statusTimer = setTimeout(() => setDirty(dirty), ms);
+}
 function saved(){
   setDirty(false);
   savelbl.textContent = 'сохранено';
-  setTimeout(() => setDirty(dirty), 900);
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => setDirty(dirty), 900);
 }
 
 async function saveFile(){
   if(readonlyPath){
     saveBtn.textContent = 'только чтение';
-    setTimeout(() => setDirty(dirty), 1200);
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => setDirty(dirty), 1200);
+    return;
+  }
+  if(localHandle){
+    if(!area.value.trim() && !confirm('текст пустой — затереть файл?')) return;
+    saveBtn.disabled = true;
+    savelbl.textContent = 'сохраняю…';
+    try {
+      const w = await localHandle.createWritable();
+      await w.write(area.value);
+      await w.close();
+      saved();
+    } catch(e){
+      savelbl.textContent = 'локальный файл не принял';
+      clearTimeout(statusTimer);
+      statusTimer = setTimeout(() => setDirty(dirty), 1400);
+    } finally {
+      saveBtn.disabled = false;
+    }
     return;
   }
   if(!serverTarget){
     savelbl.textContent = 'некуда писать';
-    setTimeout(() => setDirty(dirty), 1200);
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => setDirty(dirty), 1200);
     return;
   }
   if(!area.value.trim() && !confirm('текст пустой — затереть файл?')) return;
@@ -684,7 +712,8 @@ async function saveFile(){
   } finally {
     saveBtn.disabled = false;
   }
-  setTimeout(() => setDirty(dirty), 1400);
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => setDirty(dirty), 1400);
 }
 
 saveBtn.addEventListener('click', saveFile);
@@ -878,10 +907,23 @@ async function loadTree(dir){
     renderNav();
   } catch(e){}
 }
+async function refreshFiles(){
+  try {
+    const r = await fetch('/__list');
+    if(!r.ok) return;
+    const data = await r.json();
+    const files = (data && data.files) || [];
+    if(!files.length) return;
+    serverFiles.length = 0;
+    serverFiles.push(...files);
+    if(!nav.hidden && navFilter) renderNav();
+  } catch(e){}
+}
 function openNav(dir){
   nav.hidden = false;
   pathin.value = '';
   navFilter = '';
+  refreshFiles();
   loadTree(dir || '');
   pathin.focus();
 }
@@ -1069,22 +1111,44 @@ window.addEventListener('keydown', e => {
 });
 
 const fileInput = document.getElementById('file');
-document.getElementById('open').addEventListener('click', () => fileInput.click());
+let localHandle = null;
+async function pickLocal(){
+  if(!window.showOpenFilePicker){ fileInput.click(); return; }
+  try {
+    const [h] = await window.showOpenFilePicker({multiple: false});
+    const file = await h.getFile();
+    if(file.size > 32 * 1024 * 1024){ target.textContent = 'файл больше 32МБ — не открою'; return; }
+    const txt = await file.text();
+    if(!confirmLeave()) return;
+    localHandle = h;
+    serverTarget = null;
+    readonlyPath = null;
+    loadError = '';
+    loadText(txt, h.name);
+    setStatus('локальный файл: ' + h.name + ' — Ctrl+S пишет прямо в него');
+    target.title = h.name;
+  } catch(e){
+    if(!e || e.name !== 'AbortError') setStatus('файл не открылся: ' + ((e && e.message) || 'ошибка'), 4000);
+  }
+}
+document.getElementById('open').addEventListener('click', () => pickLocal());
 fileInput.addEventListener('change', async () => {
   const f = fileInput.files && fileInput.files[0];
   if(!f) return;
-  if(!confirmLeave()){ fileInput.value = ''; return; }
-  const txt = await f.text();
+  fileInput.value = '';
+  if(!confirmLeave()) return;
+  await refreshFiles();
   const matches = serverFiles.filter(p => p.split('/').pop() === f.name);
+  const txt = await f.text();
   const rel = matches.length === 1 ? matches[0] : null;
   serverTarget = rel;
   if(rel){ readonlyPath = null; st.file = rel; st.navdir = rel.indexOf('/') >= 0 ? rel.replace(/\/[^/]*$/, '') : ''; save(); }
   loadText(txt, f.name);
   if(!rel){
-    target.textContent = !serverMode ? 'без сервера правки писать некуда' :
-      matches.length > 1 ? 'таких файлов несколько в корне — выбери по имени в «файлах» (Ctrl+P)' : 'файл вне папки сервера — писать некуда';
-    target.title = matches.length > 1 ? matches.join('\n') : target.textContent;
-    setTimeout(() => setDirty(dirty), 4000);
+    setStatus(!serverMode ? 'без сервера правки писать некуда' :
+      matches.length > 1 ? 'в корне ' + matches.length + ' файлов с таким именем — цель записи не подключена, файл открыт только на чтение'
+                         : 'файл вне папки сервера — писать некуда', 4000);
+    target.title = matches.length > 1 ? matches.join('\n') : f.name;
   }
 });
 
@@ -1095,6 +1159,7 @@ function confirmLeave(){
 function openServerFile(rel){
   if(!rel) return;
   if(!confirmLeave()) return;
+  localHandle = null;
   const token = loadToken;
   serverTarget = rel;
   setDirty(dirty);

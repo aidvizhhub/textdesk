@@ -87,6 +87,7 @@ try:
     with sync_playwright() as p:
         browser = p.chromium.launch(channel='chrome', headless=True)
         page = browser.new_page()
+        page.add_init_script("delete window.showOpenFilePicker")
 
         page.goto(base)
         page.wait_for_load_state('networkidle')
@@ -186,7 +187,6 @@ try:
         page.wait_for_function("document.getElementById('save').textContent.includes('сохранено')")
         check('кнопка: VPN.md записан', vpn.read_text(encoding='utf-8') == 'vpn pravka')
         check('соседний файл не тронут', file11.read_text(encoding='utf-8') == 'правка из теста')
-
         page.goto(base + '?file=tool.py')
         page.wait_for_load_state('networkidle')
         page.wait_for_function("document.getElementById('t').value.length > 0")
@@ -545,16 +545,6 @@ def hello(name: str) -> str:
               rootimg['src'] == '/pic-root.png' and rootimg['w'] > 0 and not rootimg['miss'], str(rootimg))
         page.click('#viewbtn')
         page.wait_for_timeout(200)
-        vv = urllib.request.urlopen(base + '__version').read().decode('utf-8').strip()
-        check('сервер отдаёт версию страницы для проверки устаревания', len(vv) > 5 and '-' in vv, vv)
-        page.route('**/__version', lambda route: route.fulfill(status=200, body='999-999'))
-        page.evaluate("checkVersion()")
-        page.wait_for_timeout(600)
-        st = page.evaluate("""() => ({shown: !document.getElementById('stale').hidden,
-                                      text: document.getElementById('stale').textContent})""")
-        check('новая версия на сервере: страница сама предупреждает и предлагает обновить',
-              st['shown'] and 'обновить' in st['text'], str(st))
-        page.unroute('**/__version')
         back = page.evaluate("""() => ({preview: document.body.classList.contains('preview'),
                                        same: document.getElementById('t').value.includes('корневой файл')})""")
         check('просмотр md: возврат к исходнику сохраняет текст', (not back['preview']) and back['same'], str(back))
@@ -574,6 +564,46 @@ def hello(name: str) -> str:
               pw['backW'] > 100 and pw['lines'] > 0 and pw['firstRows'] <= 3 and pw['spans'] > 0, str(pw))
         page.click('#wrapbtn')
         page.wait_for_timeout(300)
+        page.set_input_files('#file', {'name': 'canon.md', 'mimeType': 'text/markdown', 'buffer': '# из пикера\n'.encode('utf-8')})
+        page.wait_for_function("document.getElementById('t').value === '# из пикера\\n'")
+        page.wait_for_timeout(300)
+        pick = page.evaluate("""() => ({navHidden: document.getElementById('nav').hidden,
+                                        target: document.getElementById('target').textContent,
+                                        title: document.getElementById('target').title})""")
+        check('пикер с неоднозначным именем: контент открыт, цель записи не подключена и это сказано',
+              pick['navHidden'] and 'файлов с таким именем' in pick['target'] and '11/canon.md' in pick['title'], str(pick))
+        page.evaluate("""() => {
+          window.__wrote = null;
+          window.showOpenFilePicker = async () => [{
+            name: 'локальный.md',
+            getFile: async () => new File(['# локальный файл\\n'], 'локальный.md', {type: 'text/markdown'}),
+            createWritable: async () => ({write: async t => { window.__wrote = t; }, close: async () => {}}),
+          }];
+        }""")
+        page.click('#open')
+        page.wait_for_function("document.getElementById('t').value === '# локальный файл\\n'")
+        page.wait_for_timeout(300)
+        loc = page.evaluate("() => document.getElementById('target').textContent")
+        check('локальный файл из системного пикера открывается и помечен как локальный',
+              'локальный файл' in loc and 'локальный.md' in loc, loc)
+        page.fill('#t', '# правка локального\n')
+        page.keyboard.press('Control+s')
+        page.wait_for_function("document.getElementById('save').textContent.includes('сохранено')")
+        wrote = page.evaluate("window.__wrote")
+        check('Ctrl+S пишет прямо в локальный файл через File System Access API, без сервера',
+              wrote == '# правка локального\n', str(wrote))
+        page.evaluate("delete window.showOpenFilePicker")
+
+        vv = urllib.request.urlopen(base + '__version').read().decode('utf-8').strip()
+        check('сервер отдаёт версию страницы для проверки устаревания', len(vv) > 5 and '-' in vv, vv)
+        page.route('**/__version', lambda route: route.fulfill(status=200, body='999-999'))
+        page.evaluate("checkVersion()")
+        page.wait_for_timeout(600)
+        st = page.evaluate("""() => ({shown: !document.getElementById('stale').hidden,
+                                      text: document.getElementById('stale').textContent})""")
+        check('новая версия на сервере: страница сама предупреждает и предлагает обновить',
+              st['shown'] and 'обновить' in st['text'], str(st))
+        page.unroute('**/__version')
         page.click('#viewbtn')
         page.wait_for_function("document.body.classList.contains('preview')")
         page.click('#bookbtn')
