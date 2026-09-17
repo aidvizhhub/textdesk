@@ -572,6 +572,7 @@ def hello(name: str) -> str:
         sc = page.evaluate("document.getElementById('view').scrollTop")
         check('колесо мыши скроллит просмотр markdown', sc > 0, 'scrollTop=' + str(sc))
         # вкладки открытых файлов: клик — в текущей, средний клик и крестик — закрыть
+        page.evaluate("() => { st.tabs = []; st.tab = ''; save(); }")
         page.goto(base + '?file=11/canon.md')
         page.wait_for_function("document.getElementById('t').value.startsWith('# Заголовок первый')")
         page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 1")
@@ -621,6 +622,34 @@ def hello(name: str) -> str:
         check('возврат из просмотра в текст: вид скрыт и очищен, редактор на месте',
               (not back_clean['preview']) and (not back_clean['hint']) and back_clean['viewDisplay'] == 'none'
               and back_clean['viewEmpty'] and back_clean['ta'] == 'block', str(back_clean))
+        page.goto(base + '?file=tool.py')
+        page.wait_for_function("document.getElementById('t').value.length > 0")
+        page.click('#navbtn')
+        page.wait_for_function("!document.getElementById('nav').hidden && document.querySelectorAll('#navlist .navitem').length > 3")
+        page.fill('#pathin', 'canon')
+        page.wait_for_function("document.querySelectorAll('#navlist .navitem').length === 2")
+        popups = []
+        page.context.on('page', lambda pg2: popups.append(pg2))
+        page.evaluate_handle("() => [...document.querySelectorAll('#navlist .navitem')].find(r => r.textContent.includes('canon.md') && !r.textContent.includes('deep'))").as_element().click(modifiers=['Control'])
+        page.wait_for_timeout(1000)
+        print('T5 popups:', len(popups), [pp.url for pp in popups], flush=True)
+        check('Ctrl+клик по файлу в обзоре открывает его в новой вкладке браузера',
+              len(popups) == 1 and '?file=11/canon.md' in popups[0].url, str([pp.url for pp in popups]))
+        if popups: popups[0].close()
+        popups.clear()
+        page.evaluate_handle("() => [...document.querySelectorAll('#navlist .navitem')].find(r => r.textContent.includes('deep/canon.md'))").as_element().click(button='middle')
+        page.wait_for_timeout(1000)
+        check('средний клик по файлу в обзоре тоже даёт новую вкладку',
+              len(popups) == 1 and '?file=11/deep/canon.md' in popups[0].url, str([pp.url for pp in popups]))
+        if popups: popups[0].close()
+        popups.clear()
+        page.press('#pathin', 'Control+Enter')
+        page.wait_for_timeout(1000)
+        check('Ctrl+Enter в поле пути открывает файл в новой вкладке',
+              len(popups) == 1 and '?file=11/canon.md' in popups[0].url, str([pp.url for pp in popups]))
+        if popups: popups[0].close()
+        page.keyboard.press('Escape')
+        page.wait_for_timeout(150)
         page.goto(base + '?file=rootpic.md')
         page.wait_for_function("!document.getElementById('viewbtn').hidden")
         page.wait_for_timeout(300)

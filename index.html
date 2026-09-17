@@ -265,6 +265,7 @@ const root = document.documentElement;
 const KEY = 'txtviewer';
 let st = {};
 try { st = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e){}
+const tabsFromStore = Array.isArray(st.tabs) ? st.tabs.slice(-12) : [];   // снимок вкладок до первого save(), иначе гонка с ?file= их затрёт
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch(e){} };
 
 function applyTheme(){
@@ -961,15 +962,26 @@ function renderNav(){
       label.textContent = it.kind === 'up' ? 'наверх' : it.name;
       row.append(ic, label);
     }
-    row.addEventListener('click', () => navActivate(i));
+    row.addEventListener('click', e => navActivate(i, e));
+    row.addEventListener('auxclick', e => {
+      if(e.button !== 1) return;
+      e.preventDefault();
+      navNewTab(navFiltered()[i]);
+    });
     navlist.append(row);
   });
   const sel = navlist.querySelector('.navitem.sel');
   if(sel) sel.scrollIntoView({block: 'nearest'});
 }
-function navActivate(i){
+function navNewTab(it){
+  if(!it || it.kind === 'up' || it.kind === 'dir') return;
+  if(navAbs){ window.open('/?file=' + encodeURIComponent(it.rel).replace(/%2F/g, '/'), '_blank'); return; }
+  window.open(hrefFor(it.rel), '_blank');
+}
+function navActivate(i, e){
   const it = navFiltered()[i];
   if(!it) return;
+  if(e && (e.ctrlKey || e.metaKey)){ navNewTab(it); return; }   // как в редакторах: ctrl+клик открывает в новой вкладке
   if(it.kind === 'hit'){
     navClose();
     pendingFind = {q: navGrep ? navGrep.q : '', line: it.line};
@@ -1048,12 +1060,12 @@ pathin.addEventListener('keydown', e => {
     if(navFilter){
       const realIdx = items.findIndex(it => it.kind !== 'up');
       if(realIdx >= 0){
-        navActivate(items[navSel] && items[navSel].kind !== 'up' ? navSel : realIdx);
+        navActivate(items[navSel] && items[navSel].kind !== 'up' ? navSel : realIdx, e);
         return;
       }
       if(v){ pathResolve(v); return; }
     }
-    if(items.length){ navActivate(navSel); return; }
+    if(items.length){ navActivate(navSel, e); return; }
     if(v){ pathResolve(v); return; }
     navNote('введи имя файла, папки или путь');
   } else if(e.key === 'Escape'){
@@ -1209,7 +1221,7 @@ window.addEventListener('keydown', e => {
   else if(e.key === 'Home'){ e.preventDefault(); navSel = 0; renderNav(); }
   else if(e.key === 'End'){ e.preventDefault(); navSel = Math.max(0, items.length - 1); renderNav(); }
   else if(inField){ /* Enter и Backspace в полях разбирают сами поля */ }
-  else if(e.key === 'Enter'){ e.preventDefault(); navActivate(navSel); }
+  else if(e.key === 'Enter'){ e.preventDefault(); navActivate(navSel, e); }
   else if(e.key === 'Backspace'){
     e.preventDefault();
     if(navFilter){ navFilter = ''; navSel = 0; renderNav(); }
@@ -1557,6 +1569,7 @@ function tabSave(){
 }
 function tabOpen(rel, name){
   if(!rel) return;
+  tabRestore(serverFiles.length ? serverFiles : null);   // вкладки прошлой сессии раньше новой
   const t = tabs.find(t => t.rel === rel);
   if(!t) tabs.push({rel, name: name || rel.split('/').pop()});
   if(tabs.length > 12) tabs.splice(0, tabs.length - 12);
@@ -1570,10 +1583,11 @@ function tabBlur(){
   tabRender();
 }
 function tabRestore(files){
-  if(!Array.isArray(st.tabs)) return;
-  for(const rel of st.tabs.slice(-12)){
-    if(files.indexOf(rel) !== -1 && !tabs.some(t => t.rel === rel)) tabs.push({rel, name: rel.split('/').pop()});
+  if(!tabsFromStore.length) return;
+  for(const rel of tabsFromStore){
+    if((!files || files.indexOf(rel) !== -1) && !tabs.some(t => t.rel === rel)) tabs.push({rel, name: rel.split('/').pop()});
   }
+  tabsFromStore.length = 0;
   tabRender();
 }
 function tabActivate(rel){
@@ -1604,6 +1618,7 @@ function tabClose(rel){
 }
 function openServerFile(rel){
   if(!rel) return;
+  if(rel.charAt(0) === '/'){ openAbsFile(rel); return; }   // абсолютный путь вне корня — как файл диска
   if(!confirmLeave()) return;
   localHandle = null;
   handleForget();
