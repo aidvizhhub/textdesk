@@ -201,6 +201,32 @@ try:
         check('запись идёт через os.replace, а не write_bytes',
               'os.replace(' in (HERE / 'serve.py').read_text(encoding='utf-8')
               and 'target.write_bytes' not in (HERE / 'serve.py').read_text(encoding='utf-8'))
+        check('после сохранения кнопка снова живая, в билде нет самодельных пухлых теней',
+              not page.eval_on_selector('#save', 'el => el.disabled')
+              and '0 22px 60px' not in (HERE / 'index.html').read_text(encoding='utf-8')
+              and '0 18px 50px' not in (HERE / 'index.html').read_text(encoding='utf-8'), '')
+        dirty_guard = page.evaluate("""() => ({dirty: dirty, fname: document.getElementById('fname').textContent})""")
+        page.fill('#t', dirty_guard['fname'] and page.eval_on_selector('#t', 'el => el.value') + '\nправка без сохранения' or 'правка без сохранения')
+        page.wait_for_timeout(200)
+        page.keyboard.press('Control+p')
+        page.wait_for_selector('#nav:not([hidden])')
+        page.wait_for_timeout(400)
+        page.fill('#pathin', 'VPN')
+        page.wait_for_timeout(300)
+        page.press('#pathin', 'Enter')      # диалог никто не принимает — Playwright отклоняет
+        page.wait_for_timeout(700)
+        check('несохранённые правки: уход в другой файл не проходит без согласия',
+              page.eval_on_selector('#fname', 'el => el.textContent') == dirty_guard['fname'],
+              page.eval_on_selector('#fname', 'el => el.textContent') + ' vs ' + dirty_guard['fname'])
+        page.once('dialog', lambda d: d.accept())
+        page.keyboard.press('Control+p')
+        page.wait_for_selector('#nav:not([hidden])')
+        page.wait_for_timeout(300)
+        page.fill('#pathin', 'VPN')
+        page.wait_for_timeout(300)
+        page.press('#pathin', 'Enter')
+        page.wait_for_function("document.getElementById('fname').textContent === 'VPN.md'")
+        check('несохранённые правки: с согласием файл открывается', True)
 
         (root / 'ro').mkdir(exist_ok=True)
         (root / 'ro' / 'ro.txt').write_text('не трогать\n', encoding='utf-8')

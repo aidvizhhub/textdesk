@@ -21,6 +21,8 @@ try {
   --book-lh-ratio:1.75;
   --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px;
   --r1:6px; --r2:8px; --r3:10px;
+  --shadow-card:0 6px 12px -3px #01040966, 0 6px 18px 0 #01040966;
+  --shadow-pop:0 24px 48px 0 #010409;
   color-scheme:dark;
   scrollbar-color:#3b3a37 transparent;
 }
@@ -28,6 +30,8 @@ html.light{
   --bg:#f1f0ef; --panel:#fdfdfc; --fg:#21201c; --dim:#63635e; --line:#dad9d6;
   --btn:#e9e8e6; --btnfg:#21201c; --acc:#8f560a;
   --tok-kw:#6550b9; --tok-str:#276a34; --tok-com:#63635e; --tok-num:#8f560a; --tok-fn:#0e60ae; --tok-type:#046f61; --tok-del:#ce2c31; --sel:rgba(143,86,10,.18);
+  --shadow-card:0 6px 12px -3px #25292e0a, 0 6px 18px 0 #25292e1f;
+  --shadow-pop:0 40px 80px 0 #25292e3d;
   color-scheme:light;
   scrollbar-color:#bcbbb5 transparent;
 }
@@ -81,7 +85,7 @@ body,.bar,.stat,button{transition:background-color .18s,color .18s,border-color 
 @media (prefers-reduced-motion:reduce){body,.bar,.stat,button{transition:none}}
 #nav{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;background:rgba(0,0,0,.45);z-index:20}
 #nav[hidden]{display:none}
-#navpanel{margin-top:56px;width:min(640px,94vw);max-height:74vh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+#navpanel{margin-top:56px;width:min(640px,94vw);max-height:74vh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow-pop)}
 #navcrumbs{display:flex;gap:5px;align-items:center;flex-wrap:wrap;padding:8px 11px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--dim)}
 #navcrumbs button{background:none;border:0;color:var(--acc);cursor:pointer;padding:1px 4px;font:inherit}
 #navfilter{margin-left:auto;color:var(--dim)}
@@ -139,7 +143,7 @@ body.book #bookl,body.book #bookr{display:flex}
 #bookpage{width:3.6ch;background:transparent;border:0;border-bottom:1px solid transparent;color:var(--acc);font:inherit;font-size:inherit;text-align:right;outline:none;padding:0}
 #bookpage:focus{border-bottom-color:var(--acc)}
 body.book main{align-items:center;background:color-mix(in srgb, var(--fg) 6%, var(--bg))}
-body.book .editor{flex:none;width:min(78ch,100%);height:var(--book-h,60vh);margin:0 auto;line-height:var(--book-lhp,var(--book-lh-ratio));background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.30)}
+body.book .editor{flex:none;width:min(78ch,100%);height:var(--book-h,60vh);margin:0 auto;line-height:var(--book-lhp,var(--book-lh-ratio));background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-card)}
 body.book #backw{left:var(--bpx);top:var(--bpy);right:var(--bpx);bottom:var(--bpy)}
 body.book #back{left:0;top:0;width:calc(100% + 2ch) !important}
 body.book #back .ln{padding-left:calc(var(--gut) + 1.6rem + 2ch);text-indent:-2ch}
@@ -149,6 +153,8 @@ body.book #wrapbtn{display:none}
 #pathin,#navgrep{width:100%;background:var(--btn);border:1px solid var(--line);border-radius:var(--r2);color:var(--fg);font:inherit;font-size:12.5px;padding:var(--s2) var(--s3);outline:none}
 #pathin:focus,#navgrep:focus{border-color:var(--acc)}
 .navitem .hittext{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.navitem .nm{flex:none;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#target{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .navitem .hitname{flex:none}
 #findwrap{display:inline-flex;align-items:center;gap:7px}
 #findin{width:min(24ch,34vw);background:var(--btn);border:1px solid var(--line);border-radius:var(--r2);color:var(--fg);font:inherit;font-size:12.5px;padding:var(--s2) var(--s2);outline:none}
@@ -163,6 +169,7 @@ body.book #wrapbtn{display:none}
 <symbol id="i-sun" viewBox="0 0 24 24"><g fill="none"><path d="M12 2V4M12 20V22M4.93005 4.93018L6.34005 6.34018M17.66 17.6602L19.07 19.0702M2 12H4M20 12H22M6.34005 17.6602L4.93005 19.0702M19.07 4.93018L17.66 6.34018M16 12C16 14.2091 14.2091 16 12 16C9.79086 16 8 14.2091 8 12C8 9.79086 9.79086 8 12 8C14.2091 8 16 9.79086 16 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
 <symbol id="i-moon" viewBox="0 0 24 24"><g fill="none"><path d="M20.985 12.486C20.8912 14.2221 20.2966 15.894 19.273 17.2994C18.2494 18.7048 16.8406 19.7837 15.217 20.4055C13.5933 21.0274 11.8243 21.1656 10.1237 20.8035C8.42318 20.4414 6.86392 19.5945 5.63442 18.3651C4.40493 17.1358 3.55785 15.5766 3.19558 13.8761C2.83331 12.1756 2.97136 10.4065 3.59304 8.78279C4.21472 7.15906 5.29342 5.75016 6.69874 4.72641C8.10406 3.70265 9.77583 3.10788 11.512 3.01397C11.917 2.99197 12.129 3.47397 11.914 3.81697C11.1949 4.96753 10.8869 6.32784 11.0405 7.67592C11.194 9.024 11.7999 10.2803 12.7593 11.2396C13.7187 12.199 14.9749 12.805 16.323 12.9585C17.6711 13.112 19.0314 12.8041 20.182 12.085C20.526 11.87 21.007 12.081 20.985 12.486Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
 <symbol id="i-file-text" viewBox="0 0 24 24"><g fill="none"><path d="M14 2H6C5.46957 2 4.96086 2.21072 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8M14 2C14.3166 1.99949 14.6301 2.06161 14.9225 2.18277C15.215 2.30394 15.4806 2.48176 15.704 2.706L19.292 6.294C19.5168 6.51751 19.6952 6.78335 19.8167 7.07616C19.9382 7.36898 20.0005 7.68297 20 8M14 2V7C14 7.26522 14.1054 7.51957 14.2929 7.70711C14.4804 7.89464 14.7348 8 15 8L20 8M10 9H8M16 13H8M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><g fill="none"><path d="m21 21-4.34-4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
 <symbol id="i-folder-tree" viewBox="0 0 24 24"><g fill="none"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 5a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 3v13a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
 <symbol id="i-folder-open" viewBox="0 0 24 24"><g fill="none"><path d="M6 14L7.5 11.1C7.66307 10.7761 7.91112 10.5027 8.21761 10.3089C8.5241 10.1152 8.8775 10.0084 9.24 9.99997H20M20 9.99997C20.3055 9.99944 20.6071 10.0689 20.8816 10.2031C21.1561 10.3372 21.3963 10.5325 21.5836 10.7738C21.7709 11.0152 21.9004 11.2963 21.9622 11.5955C22.024 11.8947 22.0164 12.2041 21.94 12.5L20.4 18.5C20.2886 18.9315 20.0362 19.3135 19.6829 19.5853C19.3296 19.857 18.8957 20.003 18.45 20H4C3.46957 20 2.96086 19.7893 2.58579 19.4142C2.21071 19.0391 2 18.5304 2 18V4.99997C2 4.46954 2.21071 3.96083 2.58579 3.58576C2.96086 3.21069 3.46957 2.99997 4 2.99997H7.9C8.23449 2.99669 8.56445 3.07736 8.8597 3.23459C9.15495 3.39183 9.40604 3.6206 9.59 3.89997L10.4 5.09997C10.5821 5.3765 10.83 5.60349 11.1215 5.76058C11.413 5.91766 11.7389 5.99992 12.07 5.99997H18C18.5304 5.99997 19.0391 6.21069 19.4142 6.58576C19.7893 6.96083 20 7.46954 20 7.99997V9.99997Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
 <symbol id="i-save" viewBox="0 0 24 24"><g fill="none"><path d="M17 21V14C17 13.7348 16.8946 13.4804 16.7071 13.2929C16.5196 13.1054 16.2652 13 16 13H8C7.73478 13 7.48043 13.1054 7.29289 13.2929C7.10536 13.4804 7 13.7348 7 14V21M7 3V7C7 7.26522 7.10536 7.51957 7.29289 7.70711C7.48043 7.89464 7.73478 8 8 8H15M15.2 3C15.7275 3.00751 16.2307 3.22317 16.6 3.6L20.4 7.4C20.7768 7.76926 20.9925 8.27246 21 8.8V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H15.2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
@@ -172,7 +179,7 @@ body.book #wrapbtn{display:none}
 
 <div class="bar">
   <b><svg class="ic" aria-hidden="true"><use href="#i-file-text"/></svg><span id="fname">demo.md</span></b>
-  <button id="findbtn" title="поиск по файлу (Ctrl+F)">найти</button>
+  <button id="findbtn" title="поиск по файлу (Ctrl+F)"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>найти</button>
   <span id="findwrap" hidden><input id="findin" type="text" spellcheck="false" placeholder="искать в файле…"><span id="findcnt"></span><button id="findcase" title="учитывать регистр" aria-pressed="false">Aa</button></span>
   <div class="ctl">
     <div class="seg">
@@ -601,12 +608,16 @@ async function saveFile(){
     return;
   }
   if(!area.value.trim() && !confirm('текст пустой — затереть файл?')) return;
+  saveBtn.disabled = true;
+  savelbl.textContent = 'сохраняю…';
   try {
     const r = await fetch('/__save?file=' + encodeURIComponent(serverTarget), {method:'POST', body: area.value});
     if(r.ok){ saved(); return; }
     savelbl.textContent = 'сервер не принял';
   } catch(e){
     savelbl.textContent = 'сервер недоступен';
+  } finally {
+    saveBtn.disabled = false;
   }
   setTimeout(() => setDirty(dirty), 1400);
 }
@@ -733,6 +744,8 @@ function renderNav(){
     ic.className = 'dirc';
     ic.textContent = it.kind === 'up' ? '..' : (it.kind === 'dir' ? '→' : '·');
     const label = document.createElement('span');
+    label.className = 'nm';
+    label.title = it.name;
     if(it.kind === 'hit'){
       ic.textContent = '•';
       label.className = 'hitname';
@@ -879,6 +892,7 @@ function navNote(msg){
   pathNoteT = setTimeout(() => { pathin.placeholder = 'путь к файлу или папке…'; }, 3500);
 }
 async function openAbsFile(abs){
+  if(!confirmLeave()) return false;
   try {
     const r = await fetch('/__file?path=' + encodeURIComponent(abs));
     if(r.status === 415){ navNote('не текст: ' + abs); return false; }
@@ -988,6 +1002,7 @@ document.getElementById('open').addEventListener('click', () => fileInput.click(
 fileInput.addEventListener('change', async () => {
   const f = fileInput.files && fileInput.files[0];
   if(!f) return;
+  if(!confirmLeave()){ fileInput.value = ''; return; }
   const txt = await f.text();
   const matches = serverFiles.filter(p => p.split('/').pop() === f.name);
   const rel = matches.length === 1 ? matches[0] : null;
@@ -1001,8 +1016,13 @@ fileInput.addEventListener('change', async () => {
   }
 });
 
+function confirmLeave(){
+  if(!dirty) return true;
+  return confirm('в файле есть несохранённые правки — открыть другой? нынешние правки пропадут');
+}
 function openServerFile(rel){
   if(!rel) return;
+  if(!confirmLeave()) return;
   const token = loadToken;
   serverTarget = rel;
   setDirty(dirty);

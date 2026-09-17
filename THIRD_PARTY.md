@@ -4,8 +4,11 @@
   В комплекте `hljs.min.js` лежит вместе с уведомлением о лицензии в шапке файла.
   https://github.com/highlightjs/highlight.js
 - Lucide Icons — ISC, (c) 2026 Lucide Icons and Contributors.
-  В спрайте `gen.py` одна иконка: folder-tree (`#i-folder-tree`), путь взят как есть.
+  В спрайте `gen.py` две иконки: folder-tree (`#i-folder-tree`) и search (`#i-search`), пути взяты как есть.
   https://github.com/lucide-icons/lucide
+- Primer (primer/primitives) — MIT, (c) GitHub.
+  Взяты только значения теней floating-small и floating-large, они стали токенами --shadow-card и --shadow-pop.
+  https://github.com/primer/primitives
 - markdown-it 14.1.0 — MIT, (c) 2014 Vitaly Puzrin, Alex Kocharin.
   В комплекте `mdit.min.js` (сборка в один файл), уведомление о лицензии в шапке файла.
   https://github.com/markdown-it/markdown-it
