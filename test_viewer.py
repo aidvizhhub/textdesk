@@ -597,6 +597,12 @@ def hello(name: str) -> str:
               'не нашёл' in miss['target'] and miss['fname'] == 'no-such-file-xyz.md', str(miss))
         check('ненайденный файл: в рабочей зоне карточка с ошибкой и что делать',
               miss['hint'] and 'не нашёл' in (miss['card'] or '') and 'Ctrl+P' in (miss['card'] or ''), str(miss['card']))
+        page.goto(base + '?file=sub/notes.md')
+        page.wait_for_timeout(1300)
+        tw = page.evaluate("""() => ({target: document.getElementById('target').textContent,
+                                      card: document.querySelector('.hintcard') ? document.querySelector('.hintcard').textContent : null})""")
+        check('битый путь: сказано, что такой файл есть в другом месте',
+              'есть: notes.md' in tw['target'] and 'есть: notes.md' in (tw['card'] or ''), str(tw))
         page.evaluate("localStorage.removeItem('txtviewer')")
         page.goto(base)
         page.wait_for_function("document.querySelector('.hintcard') !== null")

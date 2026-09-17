@@ -1119,11 +1119,25 @@ function openServerFile(rel){
     st.navdir = rel.indexOf('/') >= 0 ? rel.replace(/\/[^/]*$/, '') : '';
     save();
     loadText(txt, rel.split('/').pop());
-  }).catch(e => {
+  }).catch(async e => {
     if(token !== loadToken) return;
     serverTarget = null;
-    loadError = (String(e.message) === '404' ? 'не нашёл: ' : 'не прочитал: ') + rel;
-    loadText('', rel.split('/').pop());
+    const base = rel.split('/').pop();
+    if(!serverFiles.length){
+      try {
+        const lr = await fetch('/__list');
+        if(lr.ok){
+          const data = await lr.json();
+          const files = (data && data.files) || [];
+          if(files.length){ serverFiles.length = 0; serverFiles.push(...files); }
+        }
+      } catch(e2){}
+      if(token !== loadToken) return;
+    }
+    const twins = serverFiles.filter(p => p.split('/').pop() === base && p !== rel).slice(0, 3);
+    loadError = (String(e.message) === '404' ? 'не нашёл: ' : 'не прочитал: ') + rel
+              + (twins.length ? ' — такой файл есть: ' + twins.join(', ') : '');
+    loadText('', base);
     setDirty(dirty);
   });
 }
