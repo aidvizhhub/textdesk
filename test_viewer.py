@@ -684,8 +684,10 @@ def hello(name: str) -> str:
         page.wait_for_function("document.body.classList.contains('media')")
         vid = page.evaluate("""() => ({v: !document.getElementById('mvid').hidden,
                                         src: document.getElementById('mvid').getAttribute('src'),
-                                        img: document.getElementById('mimg').hidden})""")
-        check('mp4 открывается плеером, а не текстом', vid['v'] and vid['src'] == '/11/clip.mp4' and vid['img'], str(vid))
+                                        img: document.getElementById('mimg').hidden,
+                                        art: document.getElementById('artbtn').hidden})""")
+        check('mp4 открывается плеером, а не текстом, и кнопки «символы» у видео нет',
+              vid['v'] and vid['src'] == '/11/clip.mp4' and vid['img'] and vid['art'], str(vid))
         rr = urllib.request.urlopen(urllib.request.Request(base + '11/clip.mp4', headers={'Range': 'bytes=4-7'}))
         check('сервер отдаёт видео кусками (206), чтобы плеер перематывал',
               rr.status == 206 and rr.headers.get('Content-Range') == 'bytes 4-7/%d' % len(clip),
@@ -694,6 +696,31 @@ def hello(name: str) -> str:
         check('картинки и видео видны в списке файлов',
               '11/pic.png' in lst['files'] and '11/clip.mp4' in lst['files'],
               str([f for f in lst['files'] if 'pic' in f or 'mp4' in f]))
+        page.goto(base + '?file=11/pic.png')
+        page.wait_for_function("document.body.classList.contains('media') && document.getElementById('mimg').naturalWidth > 0")
+        ab = page.evaluate("() => ({hidden: document.getElementById('artbtn').hidden, text: document.getElementById('artbtn').textContent})")
+        check('у картинки снизу есть кнопка «символы»', not ab['hidden'] and ab['text'] == 'символы', str(ab))
+        page.click('#artbtn')
+        page.wait_for_timeout(300)
+        art = page.evaluate("""() => ({media: document.body.classList.contains('media'),
+                                       pos: document.getElementById('pos').textContent,
+                                       btn: document.getElementById('artbtn').textContent,
+                                       lines: document.getElementById('t').value.split('\\n').length,
+                                       head: document.getElementById('t').value.slice(0, 400)})""")
+        check('символы: картинка читается текстом из знаков',
+              not art['media'] and art['pos'] == 'картинка символами' and art['btn'] == 'картинка'
+              and art['lines'] > 10 and any(ch in art['head'] for ch in '@#*+=%'), str(art))
+        before = (root / '11' / 'pic.png').read_bytes()
+        page.keyboard.press('Control+s')
+        page.wait_for_timeout(250)
+        lab = page.evaluate("document.getElementById('savelbl').textContent")
+        check('символы в png не пишутся: только просмотр, байты целы',
+              lab == 'только просмотр' and (root / '11' / 'pic.png').read_bytes() == before, lab)
+        page.click('#artbtn')
+        page.wait_for_timeout(200)
+        back = page.evaluate("() => ({media: document.body.classList.contains('media'), btn: document.getElementById('artbtn').textContent})")
+        check('кнопка возвращает изображение с зумом', back['media'] and back['btn'] == 'символы', str(back))
+
         page.goto(base + '?file=VPN.md')
         page.wait_for_function("!document.body.classList.contains('media') && document.getElementById('t').value.length > 0")
         check('после медиа текстовый файл снова открывается текстом', True, '')
