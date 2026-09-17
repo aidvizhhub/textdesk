@@ -518,6 +518,19 @@ def hello(name: str) -> str:
                                       cnt: document.getElementById('cnt').textContent})""")
         check('пустой файл открывается как пустой и без ошибки', emp['len'] == 0 and 'не нашёл' not in emp['target'], str(emp))
 
+        long_name = 'very-long-overflow-filename-for-test-' + 'x' * 30 + '.txt'
+        (root / long_name).write_text('длинное имя\n', encoding='utf-8')
+        page.goto(base + '?file=' + long_name)
+        page.wait_for_function("document.getElementById('fname').textContent.length > 40")
+        page.wait_for_timeout(300)
+        ov = page.evaluate("""() => { const f = document.getElementById('fname');
+          return {ell: getComputedStyle(f).textOverflow, title: f.title, cut: f.scrollWidth > f.clientWidth + 1,
+                  icons: document.querySelector('#navbtn use').getAttribute('href') + '|' + document.querySelector('#open use').getAttribute('href')}; }""")
+        check('имя файла не раздувает бар: ellipsis и полное имя в title',
+              ov['ell'] == 'ellipsis' and ov['title'] == long_name and ov['cut'], str(ov))
+        check('иконки не близнецы: у «файлы» своё дерево, у «открыть» своя папка',
+              ov['icons'].split('|')[0] != ov['icons'].split('|')[1] and 'folder-tree' in ov['icons'], str(ov['icons']))
+
         page.goto(base + '?file=search.txt')
         page.wait_for_function("document.getElementById('t').value.length > 0")
         page.wait_for_timeout(300)

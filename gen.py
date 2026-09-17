@@ -36,6 +36,8 @@ try {
   --gut:calc(4ch + 1.7rem);
   --bpy:24px; --bpx:34px;
   --book-lh-ratio:1.75;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px;
+  --r1:6px; --r2:8px; --r3:10px;
   color-scheme:dark;
   scrollbar-color:#3b3a37 transparent;
 }
@@ -50,11 +52,12 @@ html.light{
 [hidden]{display:none!important}
 html{font-size:13px;height:100%}
 body{height:100%;margin:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);color:var(--fg);font:1rem/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-.bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding:10px clamp(16px,4vw,38px);background:var(--panel);border-bottom:1px solid var(--line);font-size:13px}
+.bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap;padding:10px clamp(16px,4vw,38px);background:var(--panel);border-bottom:1px solid var(--line);font-size:13px}
 .bar b{display:inline-flex;align-items:center;gap:7px;font-weight:600}
 .bar b .ic{color:var(--dim)}
-.ctl{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-button{display:inline-flex;align-items:center;gap:.5em;background:none;border:0;border-radius:8px;color:var(--btnfg);padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
+#fname{display:inline-block;max-width:min(38ch,28vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+.ctl{margin-left:auto;display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center}
+button{display:inline-flex;align-items:center;gap:.5em;background:none;border:0;border-radius:var(--r2);color:var(--btnfg);padding:var(--s2) var(--s3);font:inherit;font-size:13px;cursor:pointer}
 button:hover{background:var(--btn)}
 button:active{background:color-mix(in srgb, var(--fg) 13%, transparent)}
 button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
@@ -66,8 +69,8 @@ button:disabled:hover{background:none}
 #save.dirty:hover{background:color-mix(in srgb, var(--acc) 84%, #fff)}
 .ic{width:1.05em;height:1.05em;display:block;flex:none}
 #fsval{min-width:48px;text-align:center;color:var(--dim)}
-.seg{display:inline-flex;align-items:stretch;border:1px solid var(--line);border-radius:9px;overflow:hidden}
-.seg button{border-radius:0;padding:6px 10px}
+.seg{display:inline-flex;align-items:stretch;border:1px solid var(--line);border-radius:var(--r3);overflow:hidden}
+.seg button{border-radius:0;padding:var(--s2) var(--s3)}
 .seg button + button{border-left:1px solid var(--line)}
 .seg button:focus-visible{outline-offset:-2px}
 #reset:disabled{opacity:1;cursor:default}
@@ -158,16 +161,16 @@ body.book #back{left:0;top:0;width:calc(100% + 2ch) !important}
 body.book #back .ln{padding-left:calc(var(--gut) + 1.6rem + 2ch);text-indent:-2ch}
 body.book textarea{margin:var(--bpy) var(--bpx);overflow:hidden}
 body.book #wrapbtn{display:none}
-#navpath{display:flex;flex-direction:column;gap:6px;padding:8px 11px;border-bottom:1px solid var(--line)}
-#pathin,#navgrep{width:100%;background:var(--btn);border:1px solid var(--line);border-radius:7px;color:var(--fg);font:inherit;font-size:12.5px;padding:6px 9px;outline:none}
+#navpath{display:flex;flex-direction:column;gap:var(--s2);padding:var(--s2) var(--s3);border-bottom:1px solid var(--line)}
+#pathin,#navgrep{width:100%;background:var(--btn);border:1px solid var(--line);border-radius:var(--r2);color:var(--fg);font:inherit;font-size:12.5px;padding:var(--s2) var(--s3);outline:none}
 #pathin:focus,#navgrep:focus{border-color:var(--acc)}
 .navitem .hittext{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
 .navitem .hitname{flex:none}
 #findwrap{display:inline-flex;align-items:center;gap:7px}
-#findin{width:min(24ch,34vw);background:var(--btn);border:1px solid var(--line);border-radius:7px;color:var(--fg);font:inherit;font-size:12.5px;padding:5px 8px;outline:none}
+#findin{width:min(24ch,34vw);background:var(--btn);border:1px solid var(--line);border-radius:var(--r2);color:var(--fg);font:inherit;font-size:12.5px;padding:var(--s2) var(--s2);outline:none}
 #findin:focus{border-color:var(--acc)}
 #findcnt{color:var(--dim);font-size:12.5px;min-width:6ch}
-#findcase{font-size:12px;padding:4px 7px}
+#findcase{font-size:12px;padding:var(--s1) var(--s2)}
 ::highlight(find){background:color-mix(in srgb, var(--acc) 30%, transparent)}
 ::highlight(find-cur){background:var(--acc);color:var(--bg)}
 </style>
@@ -176,6 +179,7 @@ body.book #wrapbtn{display:none}
 <symbol id="i-sun" viewBox="0 0 24 24"><g fill="none"><path d="M12 2V4M12 20V22M4.93005 4.93018L6.34005 6.34018M17.66 17.6602L19.07 19.0702M2 12H4M20 12H22M6.34005 17.6602L4.93005 19.0702M19.07 4.93018L17.66 6.34018M16 12C16 14.2091 14.2091 16 12 16C9.79086 16 8 14.2091 8 12C8 9.79086 9.79086 8 12 8C14.2091 8 16 9.79086 16 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
 <symbol id="i-moon" viewBox="0 0 24 24"><g fill="none"><path d="M20.985 12.486C20.8912 14.2221 20.2966 15.894 19.273 17.2994C18.2494 18.7048 16.8406 19.7837 15.217 20.4055C13.5933 21.0274 11.8243 21.1656 10.1237 20.8035C8.42318 20.4414 6.86392 19.5945 5.63442 18.3651C4.40493 17.1358 3.55785 15.5766 3.19558 13.8761C2.83331 12.1756 2.97136 10.4065 3.59304 8.78279C4.21472 7.15906 5.29342 5.75016 6.69874 4.72641C8.10406 3.70265 9.77583 3.10788 11.512 3.01397C11.917 2.99197 12.129 3.47397 11.914 3.81697C11.1949 4.96753 10.8869 6.32784 11.0405 7.67592C11.194 9.024 11.7999 10.2803 12.7593 11.2396C13.7187 12.199 14.9749 12.805 16.323 12.9585C17.6711 13.112 19.0314 12.8041 20.182 12.085C20.526 11.87 21.007 12.081 20.985 12.486Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
 <symbol id="i-file-text" viewBox="0 0 24 24"><g fill="none"><path d="M14 2H6C5.46957 2 4.96086 2.21072 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8M14 2C14.3166 1.99949 14.6301 2.06161 14.9225 2.18277C15.215 2.30394 15.4806 2.48176 15.704 2.706L19.292 6.294C19.5168 6.51751 19.6952 6.78335 19.8167 7.07616C19.9382 7.36898 20.0005 7.68297 20 8M14 2V7C14 7.26522 14.1054 7.51957 14.2929 7.70711C14.4804 7.89464 14.7348 8 15 8L20 8M10 9H8M16 13H8M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
+<symbol id="i-folder-tree" viewBox="0 0 24 24"><g fill="none"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 5a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 3v13a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
 <symbol id="i-folder-open" viewBox="0 0 24 24"><g fill="none"><path d="M6 14L7.5 11.1C7.66307 10.7761 7.91112 10.5027 8.21761 10.3089C8.5241 10.1152 8.8775 10.0084 9.24 9.99997H20M20 9.99997C20.3055 9.99944 20.6071 10.0689 20.8816 10.2031C21.1561 10.3372 21.3963 10.5325 21.5836 10.7738C21.7709 11.0152 21.9004 11.2963 21.9622 11.5955C22.024 11.8947 22.0164 12.2041 21.94 12.5L20.4 18.5C20.2886 18.9315 20.0362 19.3135 19.6829 19.5853C19.3296 19.857 18.8957 20.003 18.45 20H4C3.46957 20 2.96086 19.7893 2.58579 19.4142C2.21071 19.0391 2 18.5304 2 18V4.99997C2 4.46954 2.21071 3.96083 2.58579 3.58576C2.96086 3.21069 3.46957 2.99997 4 2.99997H7.9C8.23449 2.99669 8.56445 3.07736 8.8597 3.23459C9.15495 3.39183 9.40604 3.6206 9.59 3.89997L10.4 5.09997C10.5821 5.3765 10.83 5.60349 11.1215 5.76058C11.413 5.91766 11.7389 5.99992 12.07 5.99997H18C18.5304 5.99997 19.0391 6.21069 19.4142 6.58576C19.7893 6.96083 20 7.46954 20 7.99997V9.99997Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
 <symbol id="i-save" viewBox="0 0 24 24"><g fill="none"><path d="M17 21V14C17 13.7348 16.8946 13.4804 16.7071 13.2929C16.5196 13.1054 16.2652 13 16 13H8C7.73478 13 7.48043 13.1054 7.29289 13.2929C7.10536 13.4804 7 13.7348 7 14V21M7 3V7C7 7.26522 7.10536 7.51957 7.29289 7.70711C7.48043 7.89464 7.73478 8 8 8H15M15.2 3C15.7275 3.00751 16.2307 3.22317 16.6 3.6L20.4 7.4C20.7768 7.76926 20.9925 8.27246 21 8.8V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H15.2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
 <symbol id="i-copy" viewBox="0 0 24 24"><g fill="none"><path d="M4 16C2.9 16 2 15.1 2 14V4C2 2.9 2.9 2 4 2H14C15.1 2 16 2.9 16 4M10 8H20C21.1046 8 22 8.89543 22 10V20C22 21.1046 21.1046 22 20 22H10C8.89543 22 8 21.1046 8 20V10C8 8.89543 8.89543 8 10 8Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
@@ -196,7 +200,7 @@ body.book #wrapbtn{display:none}
     <button id="theme"><svg class="ic" aria-hidden="true"><use id="themeuse" href="#i-moon"/></svg><span id="themelbl">тёмная</span></button>
     <span class="sep" aria-hidden="true"></span>
     <button id="open" title="открыть другой файл с диска"><svg class="ic" aria-hidden="true"><use href="#i-folder-open"/></svg>открыть файл…</button>
-    <button id="navbtn" title="файлы сервера (Ctrl+P)" hidden><svg class="ic" aria-hidden="true"><use href="#i-folder-open"/></svg>файлы</button>
+    <button id="navbtn" title="файлы сервера (Ctrl+P)" hidden><svg class="ic" aria-hidden="true"><use href="#i-folder-tree"/></svg>файлы</button>
     <button id="viewbtn" title="просмотр markdown: собранный документ вместо исходника" hidden>просмотр</button>
     <button id="wrapbtn" title="перенос длинных строк" class="on">перенос</button>
     <button id="bookbtn" title="режим книги: страницы влево-вправо">книга</button>
@@ -575,7 +579,9 @@ function loadText(text, name){
   area.value = text;
   area.setSelectionRange(0, 0);
   area.scrollTop = 0;
-  document.getElementById('fname').textContent = name || '';
+  const fnameEl = document.getElementById('fname');
+  fnameEl.textContent = name || '';
+  fnameEl.title = name || '';
   setDirty(false);
   scheduleBack();
   upd();
