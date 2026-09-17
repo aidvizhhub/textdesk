@@ -113,6 +113,14 @@ textarea::selection{background:var(--sel)}
 #bookl{left:10px}
 #bookr{right:10px}
 body.preview #back,body.preview #backw,body.preview textarea{display:none}
+body.media #back,body.media #backw,body.media textarea,body.media #view{display:none}
+body.media .editor::before{display:none}
+#media{display:none;position:absolute;inset:0;overflow:hidden;background:var(--bg)}
+body.media #media{display:block}
+#mimg{position:absolute;left:0;top:0;max-width:100%;max-height:100%;transform-origin:0 0;cursor:grab;user-select:none;-webkit-user-drag:none}
+#mimg.drag{cursor:grabbing}
+#mvid{position:absolute;inset:0;margin:auto;max-width:100%;max-height:100%}
+#mzoom{position:absolute;right:12px;bottom:10px;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:var(--r1);padding:2px 8px;pointer-events:none}
 #view{display:none;position:absolute;inset:0;overflow:auto;padding:0 0 2rem;line-height:1.6}
 body.preview #view{display:block}
 body.hint #view{display:block}
@@ -212,13 +220,14 @@ body.book #wrapbtn{display:none}
     <button id="cp" title="скопировать весь текст в буфер"><svg class="ic" aria-hidden="true"><use id="cpuse" href="#i-copy"/></svg><span id="cplbl">копировать весь текст</span></button>
   </div>
 </div>
-<input id="file" type="file" accept=".txt,.md,.log,.py,.sh,.js,.json,.yml,.yaml,.toml,.ini,.conf,.sql,.html,.css,.c,.h,.cpp,.go,.rs,text/plain" hidden>
+<input id="file" type="file" accept=".txt,.md,.log,.py,.sh,.js,.json,.yml,.yaml,.toml,.ini,.conf,.sql,.html,.css,.c,.h,.cpp,.go,.rs,text/plain,image/*,video/*" hidden>
 <div id="stale" hidden><span>на сервере новая версия textdesk</span><button id="stalereload">обновить</button></div>
 <main>
   <div class="editor">
     <div id="backw" aria-hidden="true"><div id="back"></div></div>
     <textarea id="t" spellcheck="false" wrap="soft"></textarea>
     <div id="view"></div>
+    <div id="media"><img id="mimg" alt="" hidden><video id="mvid" controls hidden></video><span id="mzoom" hidden></span></div>
   </div>
 </main>
 <button id="bookl" title="назад" tabindex="-1">&#8249;</button>
@@ -266,6 +275,7 @@ applyFs();
 const area = document.getElementById('t');
 const back = document.getElementById('back');
 let curName = '';
+let mediaOn = false, mediaZ = 1, mediaX = 0, mediaY = 0, mediaURL = null, mediaDrag = null;
 const pos = document.getElementById('pos');
 const cnt = document.getElementById('cnt');
 const httpMode = /^https?:$/.test(location.protocol);
@@ -273,7 +283,10 @@ const httpMode = /^https?:$/.test(location.protocol);
 function upd(){
   const v = area.value;
   const total = v.split('\n').length;
-  if(document.body.classList.contains('preview')){
+  if(mediaOn){
+    pos.textContent = isVideoName(curName) ? 'видео' : 'картинка';
+    cnt.textContent = '';
+  } else if(document.body.classList.contains('preview')){
     pos.textContent = 'просмотр';
   } else {
     const line = bookActive() ? lineAtY(area.scrollTop) + 1 : v.slice(0, area.selectionStart).split('\n').length;
@@ -295,7 +308,7 @@ function syncScroll(){
 }
 let backStale = false;
 function buildBack(){
-  if(document.body.classList.contains('preview')){ backStale = true; return; }   // холст скрыт, ширина textarea = 0
+  if(document.body.classList.contains('preview') || mediaOn){ backStale = true; return; }   // холст скрыт, ширина textarea = 0
   const lines = area.value.split('\n');
   const digits = Math.max(3, String(lines.length).length + 1);
   const gut = 'calc(' + digits + 'ch + 1.7rem)';
@@ -458,6 +471,7 @@ area.addEventListener('scroll', () => { syncScroll(); scheduleHighlight(); if(fi
 window.addEventListener('resize', () => { scheduleBack(); if(bookActive()) bookApply(); });
 document.querySelector('.editor').addEventListener('wheel', e => {
   if(e.ctrlKey) return;
+  if(mediaOn) return;   // колесо над картинкой зумит, а не мотает скрытый текст
   if(bookActive()){ e.preventDefault(); return; }
   if(e.target === area) return;
   e.preventDefault();
@@ -539,6 +553,7 @@ let loadToken = 0;
 function canWrite(){ return !!serverTarget; }
 function targetText(){
   if(loadError) return loadError;
+  if(mediaOn) return 'только просмотр: ' + (isVideoName(curName) ? 'видео' : 'картинка') + ' — колесо зумит, двойной клик вписывает';
   if(readonlyPath) return 'только чтение: ' + readonlyPath;
   if(serverTarget) return 'цель записи: ' + (rootPath ? rootPath + '/' + serverTarget : serverTarget + ' (сервер)');
   if(serverMode) return 'цель записи: не выбрана — открой файл кнопкой';
@@ -547,7 +562,7 @@ function targetText(){
 function setDirty(v){
   dirty = v;
   saveBtn.classList.toggle('dirty', v);
-  savelbl.textContent = v ? 'сохранить •' : (canWrite() ? 'сохранить' : 'сохранить некуда');
+  savelbl.textContent = mediaOn ? 'только просмотр' : (v ? 'сохранить •' : (canWrite() ? 'сохранить' : 'сохранить некуда'));
   target.textContent = targetText();
   try {
     const q = serverTarget ? '?file=' + encodeURIComponent(serverTarget).replace(/%2F/g, '/') : '';
@@ -633,6 +648,7 @@ function updateHint(){
 }
 function loadText(text, name){
   loadToken++;
+  if(mediaOn) mediaOff();
   curName = name || '';
   const auto = st.wrap === undefined;
   applyWrap(auto ? autoWrap(text, curName) : !!st.wrap, auto || bookActive());
@@ -676,6 +692,12 @@ function saved(){
 }
 
 async function saveFile(){
+  if(mediaOn){
+    savelbl.textContent = 'только просмотр';
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => setDirty(dirty), 1200);
+    return;
+  }
   if(readonlyPath){
     saveBtn.textContent = 'только чтение';
     clearTimeout(statusTimer);
@@ -1023,6 +1045,12 @@ function navNote(msg){
 }
 async function openAbsFile(abs){
   if(!confirmLeave()) return false;
+  if(isMediaName(abs)){
+    const p = rootPath && abs.indexOf(rootPath + '/') === 0 ? abs.slice(rootPath.length + 1) : '';
+    if(p){ openServerFile(p); return true; }
+    navNote('медиа вне корня сервера не покажу: ' + abs);
+    return false;
+  }
   try {
     const r = await fetch('/__file?path=' + encodeURIComponent(abs));
     if(r.status === 415){ navNote('не текст: ' + abs); return false; }
@@ -1167,6 +1195,21 @@ async function handleForget(){
 }
 async function openHandle(h){
   const file = await h.getFile();
+  if(isMediaName(h.name)){
+    if(!confirmLeave()) return false;
+    localHandle = h;
+    serverTarget = null;
+    readonlyPath = null;
+    loadError = '';
+    st.file = '';
+    save();
+    const u = URL.createObjectURL(file);
+    showMedia(h.name, u, u);
+    setStatus('локальный файл: ' + h.name + ' — просмотр, правки не пишутся', 5000);
+    target.title = h.name;
+    handleSave(h);
+    return true;
+  }
   if(file.size > 32 * 1024 * 1024){ setStatus('файл больше 32МБ — не открою', 4000); return false; }
   const txt = await file.text();
   if(!confirmLeave()) return false;
@@ -1226,6 +1269,17 @@ fileInput.addEventListener('change', async () => {
   if(!f) return;
   fileInput.value = '';
   if(!confirmLeave()) return;
+  if(isMediaName(f.name)){
+    serverTarget = null;
+    readonlyPath = null;
+    loadError = '';
+    st.file = '';
+    save();
+    const u = URL.createObjectURL(f);
+    showMedia(f.name, u, u);
+    setStatus('локальный файл: ' + f.name + ' — просмотр, записать некуда', 5000);
+    return;
+  }
   await refreshFiles();
   const matches = serverFiles.filter(p => p.split('/').pop() === f.name);
   const txt = await f.text();
@@ -1245,6 +1299,105 @@ function confirmLeave(){
   if(!dirty) return true;
   return confirm('в файле есть несохранённые правки — открыть другой? нынешние правки пропадут');
 }
+const mediaPane = document.getElementById('media');
+const mimg = document.getElementById('mimg');
+const mvid = document.getElementById('mvid');
+const mzoomEl = document.getElementById('mzoom');
+function isMediaName(name){ return /\.(png|jpe?g|gif|webp|avif|bmp|ico|mp4|webm|mov|m4v|ogv)$/i.test(name || ''); }
+function isVideoName(name){ return /\.(mp4|webm|mov|m4v|ogv)$/i.test(name || ''); }
+function mediaApply(){
+  mimg.style.transform = 'translate(' + mediaX + 'px,' + mediaY + 'px) scale(' + mediaZ + ')';
+  mzoomEl.textContent = mimg.naturalWidth ? Math.round(mediaZ * mimg.clientWidth / mimg.naturalWidth * 100) + '%' : '';
+}
+function mediaFit(){
+  mediaZ = 1;
+  mediaX = Math.max(0, (mediaPane.clientWidth - mimg.clientWidth) / 2);
+  mediaY = Math.max(0, (mediaPane.clientHeight - mimg.clientHeight) / 2);
+  mediaApply();
+}
+function mediaZoomAt(z, cx, cy){
+  const nz = Math.min(12, Math.max(0.05, z));
+  if(nz === mediaZ) return;
+  mediaX = cx - (cx - mediaX) * (nz / mediaZ);
+  mediaY = cy - (cy - mediaY) * (nz / mediaZ);
+  mediaZ = nz;
+  mediaApply();
+}
+function mediaOff(){
+  mediaOn = false;
+  document.body.classList.remove('media');
+  mvid.pause();
+  mvid.removeAttribute('src');
+  mvid.load();
+  mvid.hidden = true;
+  mimg.removeAttribute('src');
+  mimg.hidden = true;
+  mzoomEl.hidden = true;
+  mediaDrag = null;
+  if(mediaURL){ URL.revokeObjectURL(mediaURL); mediaURL = null; }
+}
+function showMedia(name, url, blob){
+  if(bookActive()) bookToggle(false);
+  setTimeout(() => findOpen(false), 0);   // панель поиска не висит над медиа: состояние чистится после инициализации скрипта
+  loadText('', name);
+  mediaOn = true;
+  mediaURL = blob || null;
+  document.body.classList.add('media');
+  if(isVideoName(name)){
+    mvid.hidden = false;
+    mimg.hidden = true;
+    mvid.src = url;
+  } else {
+    mediaZ = 1; mediaX = 0; mediaY = 0;
+    mimg.hidden = false;
+    mvid.hidden = true;
+    mimg.addEventListener('load', mediaFit, {once: true});
+    mimg.src = url;
+    mzoomEl.hidden = false;
+  }
+  setDirty(dirty);
+  updateHint();
+  upd();
+}
+mediaPane.addEventListener('wheel', e => {
+  if(!mediaOn || mimg.hidden) return;
+  e.preventDefault();
+  const r = mediaPane.getBoundingClientRect();
+  mediaZoomAt(mediaZ * Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+}, {passive: false});
+mimg.addEventListener('pointerdown', e => {
+  if(!mediaOn) return;
+  e.preventDefault();
+  mimg.setPointerCapture(e.pointerId);
+  mediaDrag = {x: e.clientX, y: e.clientY, px: mediaX, py: mediaY};
+  mimg.classList.add('drag');
+});
+mimg.addEventListener('pointermove', e => {
+  if(!mediaDrag) return;
+  mediaX = mediaDrag.px + (e.clientX - mediaDrag.x);
+  mediaY = mediaDrag.py + (e.clientY - mediaDrag.y);
+  mediaApply();
+});
+for(const ev of ['pointerup', 'pointercancel']) mimg.addEventListener(ev, () => {
+  mediaDrag = null;
+  mimg.classList.remove('drag');
+});
+mimg.addEventListener('dblclick', () => {
+  if(mimg.hidden || !mimg.naturalWidth) return;
+  if(mediaZ === 1){
+    const r = mediaPane.getBoundingClientRect();
+    mediaZoomAt(mimg.naturalWidth / mimg.clientWidth, r.width / 2, r.height / 2);
+  } else {
+    mediaFit();
+  }
+});
+window.addEventListener('keydown', e => {
+  if(!mediaOn || mimg.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+  const r = mediaPane.getBoundingClientRect();
+  if(e.key === '+' || e.key === '='){ e.preventDefault(); mediaZoomAt(mediaZ * 1.25, r.width / 2, r.height / 2); }
+  else if(e.key === '-' || e.key === '_'){ e.preventDefault(); mediaZoomAt(mediaZ / 1.25, r.width / 2, r.height / 2); }
+  else if(e.key === '0'){ e.preventDefault(); mediaFit(); }
+});
 function openServerFile(rel){
   if(!rel) return;
   if(!confirmLeave()) return;
@@ -1253,6 +1406,15 @@ function openServerFile(rel){
   const token = loadToken;
   serverTarget = rel;
   setDirty(dirty);
+  if(isMediaName(rel)){
+    readonlyPath = null;
+    loadError = '';
+    st.file = rel;
+    st.navdir = rel.indexOf('/') >= 0 ? rel.replace(/\/[^/]*$/, '') : '';
+    save();
+    showMedia(rel.split('/').pop(), '/' + rel.split('/').map(encodeURIComponent).join('/'));
+    return;
+  }
   fetch('/' + rel).then(r => {
     if(!r.ok) throw new Error(r.status);
     return r.text();
@@ -1377,6 +1539,7 @@ function bookGoto(n){
 }
 function bookToggle(on){
   const to = on === undefined ? !bookActive() : on;
+  if(mediaOn && to) return;
   document.body.classList.toggle('book', to);
   updateViewBtn();
   bookbtn.classList.toggle('on', to);

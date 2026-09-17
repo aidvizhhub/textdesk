@@ -9,9 +9,11 @@ import pathlib
 import shutil
 import socket
 import subprocess
+import struct
 import sys
 import tempfile
 import time
+import zlib
 import urllib.request
 
 import json
@@ -27,6 +29,20 @@ def check(name, cond, info=''):
     print(('OK   ' if cond else 'FAIL ') + name + ((' — ' + info) if info else ''), flush=True)
     if not cond:
         FAILED.append(name)
+
+
+def png_bytes(w, h):
+    """валидный png без внешних файлов и библиотек"""
+    def chunk(t, d):
+        c = t + d
+        return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+    raw = bytearray()
+    for y in range(h):
+        raw.append(0)
+        for x in range(w):
+            raw += bytes(((x * 37) % 256, (y * 53) % 256, 160))
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
+            + chunk(b'IDAT', zlib.compress(bytes(raw), 6)) + chunk(b'IEND', b''))
 
 
 def free_port():
@@ -270,9 +286,9 @@ try:
         (root / 'notes.md').write_text('# Заголовок\n\n**жирный** и *курсив* и `код` и [ссылка](https://example.com)\n\n- пункт раз\n- пункт два\n', encoding='utf-8')
         (root / '11' / 'deep').mkdir(exist_ok=True)
         (root / '11' / 'deep' / 'canon.md').write_text('# глубокий\n', encoding='utf-8')
-        (root / '11' / 'pic.png').write_bytes(pathlib.Path('/tmp/opencode/px.png').read_bytes())
+        (root / '11' / 'pic.png').write_bytes(png_bytes(1600, 1000))
         (root / 'rootpic.md').write_text('# корневой файл\n\n![тут](pic-root.png)\n', encoding='utf-8')
-        (root / 'pic-root.png').write_bytes(pathlib.Path('/tmp/opencode/px.png').read_bytes())
+        (root / 'pic-root.png').write_bytes(png_bytes(24, 16))
         (root / '11' / 'canon.md').write_text('''# Заголовок первый
 
 Абзац с **жирным**, *курсивом*, `инлайн-кодом` и [ссылкой](https://example.com/page).
@@ -615,6 +631,72 @@ def hello(name: str) -> str:
         })""")
         check('дескриптор локального файла уходит в IndexedDB (мок без clone — значит пусто, но не падает)',
               hnd in ('пусто', 'нет базы', 'исключение: DataCloneError' ), hnd)
+
+        page.evaluate("""() => {
+          window.showOpenFilePicker = async () => [{
+            name: 'локальный.png',
+            getFile: async () => new File([Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), c => c.charCodeAt(0))], 'локальный.png', {type: 'image/png'}),
+          }];
+        }""")
+        page.click('#open')
+        page.wait_for_function("document.body.classList.contains('media')")
+        page.wait_for_timeout(200)
+        lm = page.evaluate("""() => ({src: document.getElementById('mimg').getAttribute('src') || '',
+                                       target: document.getElementById('target').textContent})""")
+        check('локальная картинка из системного пикера показывается blob-ссылкой',
+              lm['src'].startswith('blob:') and 'локальный.png' in lm['target'], str(lm))
+        page.evaluate("delete window.showOpenFilePicker")
+
+        page.goto(base + '?file=11/pic.png')
+        page.wait_for_function("document.body.classList.contains('media') && document.getElementById('mimg').naturalWidth > 0")
+        med = page.evaluate("""() => ({src: document.getElementById('mimg').getAttribute('src'),
+                                        img: !document.getElementById('mimg').hidden,
+                                        vid: !document.getElementById('mvid').hidden,
+                                        pos: document.getElementById('pos').textContent,
+                                        target: document.getElementById('target').textContent,
+                                        zoom: document.getElementById('mzoom').textContent})""")
+        check('png открывается картинкой, а не текстом',
+              med['src'] == '/11/pic.png' and med['img'] and not med['vid'] and med['pos'] == 'картинка', str(med))
+        t0 = page.evaluate("document.getElementById('mimg').style.transform")
+        page.hover('#mimg')
+        page.mouse.wheel(0, -240)
+        page.wait_for_timeout(150)
+        t1 = page.evaluate("document.getElementById('mimg').style.transform")
+        check('колесо приближает картинку', t0 != t1, t0 + ' -> ' + t1)
+        page.dblclick('#mimg')
+        page.wait_for_timeout(150)
+        t2 = page.evaluate("document.getElementById('mimg').style.transform")
+        check('двойной клик вписывает картинку обратно', 'scale(1)' in t2, t2)
+        page.dblclick('#mimg')
+        page.wait_for_timeout(150)
+        t3 = page.evaluate("document.getElementById('mimg').style.transform")
+        check('двойной клик из вписанного даёт 1:1', 'scale(1)' not in t3, t3)
+        before = (root / '11' / 'pic.png').read_bytes()
+        page.keyboard.press('Control+s')
+        page.wait_for_timeout(300)
+        lab = page.evaluate("document.getElementById('savelbl').textContent")
+        check('в медиа Ctrl+S не пишет: только просмотр',
+              lab == 'только просмотр' and (root / '11' / 'pic.png').read_bytes() == before, lab)
+
+        clip = b'\x00\x00\x00\x18ftypmp42' + bytes(range(256)) * 4
+        (root / '11' / 'clip.mp4').write_bytes(clip)
+        page.goto(base + '?file=11/clip.mp4')
+        page.wait_for_function("document.body.classList.contains('media')")
+        vid = page.evaluate("""() => ({v: !document.getElementById('mvid').hidden,
+                                        src: document.getElementById('mvid').getAttribute('src'),
+                                        img: document.getElementById('mimg').hidden})""")
+        check('mp4 открывается плеером, а не текстом', vid['v'] and vid['src'] == '/11/clip.mp4' and vid['img'], str(vid))
+        rr = urllib.request.urlopen(urllib.request.Request(base + '11/clip.mp4', headers={'Range': 'bytes=4-7'}))
+        check('сервер отдаёт видео кусками (206), чтобы плеер перематывал',
+              rr.status == 206 and rr.headers.get('Content-Range') == 'bytes 4-7/%d' % len(clip),
+              str(rr.status) + ' ' + str(rr.headers.get('Content-Range')))
+        lst = json.loads(urllib.request.urlopen(base + '__list').read().decode('utf-8'))
+        check('картинки и видео видны в списке файлов',
+              '11/pic.png' in lst['files'] and '11/clip.mp4' in lst['files'],
+              str([f for f in lst['files'] if 'pic' in f or 'mp4' in f]))
+        page.goto(base + '?file=VPN.md')
+        page.wait_for_function("!document.body.classList.contains('media') && document.getElementById('t').value.length > 0")
+        check('после медиа текстовый файл снова открывается текстом', True, '')
 
         vv = urllib.request.urlopen(base + '__version').read().decode('utf-8').strip()
         check('сервер отдаёт версию страницы для проверки устаревания', len(vv) > 5 and '-' in vv, vv)

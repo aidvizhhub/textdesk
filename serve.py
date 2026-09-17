@@ -9,8 +9,10 @@ POST /__save?file=... ; список файлов отдаёт /__list и обн
 запросе, так что новые файлы видны без перезапуска."""
 import http.server
 import json
+import mimetypes
 import os
 import pathlib
+import re
 import sys
 import tempfile
 import urllib.parse
@@ -41,19 +43,23 @@ ALLOWED_EXT = ('.txt', '.md', '.log', '.py', '.sh', '.bash', '.zsh', '.js', '.mj
                '.env', '.sql', '.html', '.htm', '.css', '.scss', '.xml', '.csv', '.tsv',
                '.c', '.h', '.cc', '.cpp', '.hpp', '.go', '.rs', '.java', '.kt', '.rb', '.php',
                '.lua', '.pl', '.service', '.desktop', '.diff', '.patch')
+MEDIA_EXT = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.bmp', '.ico',
+             '.mp4', '.webm', '.mov', '.m4v', '.ogv')
+VIEW_EXT = ALLOWED_EXT + MEDIA_EXT   # что показываем в списках; /__file, /__save и /__grep остаются текстовыми
 MAX_BODY = 32 * 1024 * 1024
 MAX_VIEW = 2 * 1024 * 1024
 SKIP_DIRS = ('/proc', '/sys', '/dev')
 OK_ORIGINS = {'http://127.0.0.1:%d' % PORT, 'http://localhost:%d' % PORT}
 
 
-def scan_files():
+def scan_files(media=False):
+    exts = VIEW_EXT if media else ALLOWED_EXT
     found = []
     for dirpath, dirnames, filenames in os.walk(ROOT):
         rel = pathlib.Path(dirpath).relative_to(ROOT)
         dirnames[:] = [d for d in dirnames if not d.startswith('.') and len(rel.parts) < 2]
         for f in filenames:
-            if (not f.startswith('.') or f in ALLOWED_NAMES) and (pathlib.Path(f).suffix.lower() in ALLOWED_EXT or f in ALLOWED_NAMES):
+            if (not f.startswith('.') or f in ALLOWED_NAMES) and (pathlib.Path(f).suffix.lower() in exts or f in ALLOWED_NAMES):
                 found.append((pathlib.Path(dirpath) / f).relative_to(ROOT).as_posix())
     return sorted(found)
 
@@ -61,6 +67,48 @@ def scan_files():
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(ROOT), **kw)
+
+    def serve_range(self):
+        m = re.match(r'bytes=(\d*)-(\d*)$', (self.headers.get('Range') or '').strip())
+        path = urllib.parse.unquote(self.path.split('?')[0])
+        target = (ROOT / path.lstrip('/')).resolve()
+        if not m or not target.is_file() or (target != ROOT and ROOT not in target.parents):
+            self.send_error(416 if m else 403)
+            return
+        size = target.stat().st_size
+        a, b = m.group(1), m.group(2)
+        if not a and not b:
+            self.send_error(416)
+            return
+        if not a:
+            start, end = max(0, size - int(b)), size - 1
+        else:
+            start, end = int(a), (size - 1 if not b else min(int(b), size - 1))
+        if start > end or start >= size:
+            self.send_response(416)
+            self.send_header('Content-Range', 'bytes */%d' % size)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+            return
+        ctype = mimetypes.guess_type(str(target))[0] or 'application/octet-stream'
+        self.send_response(206)
+        self.send_header('Content-Type', ctype)
+        self.send_header('Accept-Ranges', 'bytes')
+        self.send_header('Content-Range', 'bytes %d-%d/%d' % (start, end, size))
+        self.send_header('Content-Length', str(end - start + 1))
+        self.end_headers()
+        left = end - start + 1
+        try:
+            with open(target, 'rb') as f:
+                f.seek(start)
+                while left > 0:
+                    chunk = f.read(min(65536, left))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    left -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def do_GET(self):
         path = self.path.split('?')[0]
@@ -121,7 +169,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     try:
                         if entry.is_dir():
                             dirs.append(str(entry))
-                        elif entry.suffix.lower() in ALLOWED_EXT or entry.name in ALLOWED_NAMES:
+                        elif entry.suffix.lower() in VIEW_EXT or entry.name in ALLOWED_NAMES:
                             files.append(str(entry))
                     except OSError:
                         continue
@@ -211,7 +259,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return
         if path == '/__list':
-            files = scan_files()
+            files = scan_files(media=True)
             body = json.dumps({'root': str(ROOT), 'files': files}, ensure_ascii=False).encode('utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
@@ -235,7 +283,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         continue
                     if entry.is_dir():
                         dirs.append(entry.relative_to(ROOT).as_posix())
-                    elif entry.suffix.lower() in ALLOWED_EXT and (not entry.name.startswith('.') or entry.name in ALLOWED_NAMES) or entry.name in ALLOWED_NAMES:
+                    elif entry.suffix.lower() in VIEW_EXT and (not entry.name.startswith('.') or entry.name in ALLOWED_NAMES) or entry.name in ALLOWED_NAMES:
                         files.append(entry.relative_to(ROOT).as_posix())
             except OSError:
                 self.send_error(500)
@@ -251,6 +299,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+        if self.headers.get('Range'):
+            self.serve_range()
             return
         super().do_GET()
 
