@@ -568,12 +568,14 @@ const view = document.getElementById('view');
 function setPreview(on){
   const can = !!on && !!MD && isMdName(curName) && !bookActive();
   document.body.classList.toggle('preview', can);
+  if(!can) view.textContent = '';
   viewbtn.classList.toggle('on', can);
   viewbtn.setAttribute('aria-pressed', can ? 'true' : 'false');
   viewbtn.textContent = can ? 'текст' : 'просмотр';
+  updateHint();
   if(can){
     view.innerHTML = MD.render(area.value || '');
-    const dir = serverTarget && serverTarget.includes('/') ? '/' + serverTarget.split('/').slice(0, -1).join('/') + '/' : '';
+    const dir = serverTarget ? '/' + (serverTarget.includes('/') ? serverTarget.split('/').slice(0, -1).join('/') + '/' : '') : '';
     if(dir) for(const el of view.querySelectorAll('img[src],a[href]')){
       const attr = el.tagName === 'IMG' ? 'src' : 'href';
       const u = el.getAttribute(attr) || '';

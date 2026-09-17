@@ -269,6 +269,8 @@ try:
         (root / 'bundle.min.js').write_text('var a=' + '"x",' * 1200 + '"z";\n', encoding='utf-8')
         (root / 'notes.md').write_text('# Заголовок\n\n**жирный** и *курсив* и `код` и [ссылка](https://example.com)\n\n- пункт раз\n- пункт два\n', encoding='utf-8')
         (root / '11' / 'pic.png').write_bytes(pathlib.Path('/tmp/opencode/px.png').read_bytes())
+        (root / 'rootpic.md').write_text('# корневой файл\n\n![тут](pic-root.png)\n', encoding='utf-8')
+        (root / 'pic-root.png').write_bytes(pathlib.Path('/tmp/opencode/px.png').read_bytes())
         (root / '11' / 'canon.md').write_text('''# Заголовок первый
 
 Абзац с **жирным**, *курсивом*, `инлайн-кодом` и [ссылкой](https://example.com/page).
@@ -520,6 +522,27 @@ def hello(name: str) -> str:
               pv['xss'] == 'undefined' and not pv['script'] and not pv['jsHref'], str(pv))
         page.click('#viewbtn')
         page.wait_for_timeout(200)
+        back_clean = page.evaluate("""() => ({preview: document.body.classList.contains('preview'),
+                                             hint: document.body.classList.contains('hint'),
+                                             viewDisplay: getComputedStyle(document.getElementById('view')).display,
+                                             viewEmpty: document.getElementById('view').textContent.trim() === '',
+                                             ta: getComputedStyle(document.getElementById('t')).display})""")
+        check('возврат из просмотра в текст: вид скрыт и очищен, редактор на месте',
+              (not back_clean['preview']) and (not back_clean['hint']) and back_clean['viewDisplay'] == 'none'
+              and back_clean['viewEmpty'] and back_clean['ta'] == 'block', str(back_clean))
+        page.goto(base + '?file=rootpic.md')
+        page.wait_for_function("!document.getElementById('viewbtn').hidden")
+        page.wait_for_timeout(300)
+        page.click('#viewbtn')
+        page.wait_for_function("document.body.classList.contains('preview')")
+        page.wait_for_timeout(700)
+        rootimg = page.evaluate("""() => { const i = document.querySelector('#view img');
+          return {src: i ? i.getAttribute('src') : null, w: i ? i.naturalWidth : 0,
+                  miss: !!document.querySelector('#view .imgmiss')}; }""")
+        check('просмотр md: у файла в корне корня картинка тоже ищется рядом (не от корня сервера)',
+              rootimg['src'] == '/pic-root.png' and rootimg['w'] > 0 and not rootimg['miss'], str(rootimg))
+        page.click('#viewbtn')
+        page.wait_for_timeout(200)
         vv = urllib.request.urlopen(base + '__version').read().decode('utf-8').strip()
         check('сервер отдаёт версию страницы для проверки устаревания', len(vv) > 5 and '-' in vv, vv)
         page.route('**/__version', lambda route: route.fulfill(status=200, body='999-999'))
@@ -531,7 +554,7 @@ def hello(name: str) -> str:
               st['shown'] and 'обновить' in st['text'], str(st))
         page.unroute('**/__version')
         back = page.evaluate("""() => ({preview: document.body.classList.contains('preview'),
-                                       same: document.getElementById('t').value.includes('Заголовок первый')})""")
+                                       same: document.getElementById('t').value.includes('корневой файл')})""")
         check('просмотр md: возврат к исходнику сохраняет текст', (not back['preview']) and back['same'], str(back))
         page.click('#viewbtn')
         page.wait_for_function("document.body.classList.contains('preview')")
