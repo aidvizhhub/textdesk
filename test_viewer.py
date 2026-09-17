@@ -572,7 +572,7 @@ def hello(name: str) -> str:
         sc = page.evaluate("document.getElementById('view').scrollTop")
         check('колесо мыши скроллит просмотр markdown', sc > 0, 'scrollTop=' + str(sc))
         # вкладки открытых файлов: клик — в текущей, средний клик и крестик — закрыть
-        page.evaluate("() => { st.tabs = []; st.tab = ''; save(); }")
+        page.evaluate("() => { try { sessionStorage.removeItem('textdesk-tabs:' + window.name); } catch(e){} }")
         page.goto(base + '?file=11/canon.md')
         page.wait_for_function("document.getElementById('t').value.startsWith('# Заголовок первый')")
         page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 1")
@@ -610,6 +610,22 @@ def hello(name: str) -> str:
         page.reload()
         page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 1 && document.querySelector('#tabs .tab.on')")
         check('после перезагрузки вкладки не дублируются: одна и активная — открытый файл', True, '')
+        page.evaluate("() => openServerFile('11/deep/canon.md')")
+        page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 2")
+        page.reload()
+        page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 2")
+        page.wait_for_timeout(400)
+        st2 = page.evaluate("""() => ({keys: [...document.querySelectorAll('#tabs .tab')].map(e => e.dataset.key),
+                                        on: (document.querySelector('#tabs .tab.on') || {dataset: {}}).dataset.key,
+                                        val: document.getElementById('t').value.slice(0, 12)})""")
+        check('F5 сохраняет вкладки и активную, файл активной открыт',
+              st2['keys'] == ['11/canon.md', '11/deep/canon.md'] and st2['on'] == '11/deep/canon.md'
+              and st2['val'].startswith('# глубокий'), str(st2))
+        isol = page.evaluate("""() => {
+            const other = 'textdesk-' + Math.random().toString(36).slice(2, 8);
+            return sessionStorage.getItem('textdesk-tabs:' + other);
+        }""")
+        check('у другой вкладки браузера нет чужого списка: ключ привязан к window.name', isol is None, str(isol))
         page.click('#viewbtn')
         page.wait_for_function("document.body.classList.contains('preview')")
         page.click('#viewbtn')
@@ -936,7 +952,7 @@ def hello(name: str) -> str:
         check('поиск по имени открывает найденное в глубине и обновляет адрес',
               page.evaluate("location.search") == '?file=11/deep/canon.md',
               page.evaluate("location.search"))
-        page.evaluate("localStorage.removeItem('txtviewer')")
+        page.evaluate("() => { localStorage.removeItem('txtviewer'); try { sessionStorage.removeItem('textdesk-tabs:' + window.name); } catch(e){} }")
         page.goto(base)
         page.wait_for_function("document.querySelector('.hintcard') !== null")
         empty_hint = page.evaluate("""() => ({hint: document.body.classList.contains('hint'),

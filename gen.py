@@ -564,7 +564,7 @@ async function checkVersion(){
 window.addEventListener('focus', checkVersion);
 setInterval(checkVersion, 300000);
 checkVersion();
-setTimeout(() => { if(!fileParam && !st.file && !serverTarget) reopenLocal(); }, 800);
+setTimeout(() => { if(!fileParam && !st.file && !serverTarget && !tabs.length) reopenLocal(); }, 800);
 
 const saveBtn = document.getElementById('save');
 const savelbl = document.getElementById('savelbl');
@@ -1564,6 +1564,38 @@ window.addEventListener('keydown', e => {
 const tabsEl = document.getElementById('tabs');
 const tabs = [];
 let tabActive = '';
+let tabWin = '';
+try {
+  tabWin = window.name && window.name.indexOf('textdesk-') === 0 ? window.name
+        : ('textdesk-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+  window.name = tabWin;   // window.name живёт в этой вкладке браузера и не копируется в новые
+} catch(e){}
+const tabStoreKey = 'textdesk-tabs:' + tabWin;
+function tabPersist(){
+  try {
+    sessionStorage.setItem(tabStoreKey, JSON.stringify({list: tabs.map(t => ({key: t.key, name: t.name})), active: tabActive}));
+  } catch(e){}
+}
+let tabSaved = null;   // снимок до первого tabPersist, иначе ?file= успевает перезаписать список
+try { tabSaved = JSON.parse(sessionStorage.getItem(tabStoreKey) || 'null'); } catch(e){}
+function tabRestore(files){
+  const saved = tabSaved;
+  tabSaved = null;
+  if(!saved || !Array.isArray(saved.list)) return;
+  const made = [];
+  for(const it of saved.list.slice(-12)){
+    if(!it || typeof it.key !== 'string') continue;
+    if(it.key.indexOf('abs:') === 0) made.push({key: it.key, name: it.name, reopen: () => openServerFile(it.key.slice(4))});
+    else if(it.key.indexOf(':') === -1 && files.indexOf(it.key) !== -1) made.push({key: it.key, name: it.name, reopen: () => openServerFile(it.key)});
+  }
+  if(!made.length) return;
+  const keys = made.map(t => t.key);
+  for(let i = tabs.length - 1; i >= 0; i--) if(keys.indexOf(tabs[i].key) !== -1) tabs.splice(i, 1);
+  tabs.unshift(...made);            // сохранённый порядок впереди, открытое по ?file= остаётся
+  if(tabs.length > 12) tabs.length = 12;
+  if(saved.active && tabs.some(t => t.key === saved.active)) tabActive = saved.active;
+  tabRender();
+}
 function tabRender(){
   tabsEl.hidden = !tabs.length;
   tabsEl.textContent = '';
@@ -1599,6 +1631,7 @@ function tabAdd(key, name, reopen){
   if(tabs.length > 12) tabs.splice(0, tabs.length - 12);
   tabActive = key;
   tabRender();
+  tabPersist();
 }
 function tabOpen(rel, name){
   if(rel) tabAdd(rel, name || rel.split('/').pop(), () => openServerFile(rel));
@@ -1613,6 +1646,12 @@ function tabActivate(key){
   const t = tabs.find(t => t.key === key);
   if(!t || t.key === tabActive) return;
   t.reopen();
+}
+function tabOpenSaved(){
+  const t = tabs.find(t => t.key === tabActive);
+  if(!t) return false;
+  t.reopen();
+  return true;
 }
 function tabClose(key){
   const i = tabs.findIndex(t => t.key === key);
@@ -1633,6 +1672,7 @@ function tabClose(key){
     setDirty(false);
   }
   tabRender();
+  tabPersist();
 }
 function openServerFile(rel){
   if(!rel) return;
@@ -1710,13 +1750,14 @@ async function initServer(){
     rootPath = (data && data.root) || '';
     serverFiles.length = 0;
     serverFiles.push(...files);
+    tabRestore(files);
     if(serverTarget){
       // уже открывается по ?file= или старой памяти
     } else if(fileParam){
       // ?file= главнее памяти: его поток загрузки сам разберётся (в том числе с ошибкой)
     } else if(st.file && files.indexOf(st.file) !== -1){
       openServerFile(st.file);
-    } else {
+    } else if(!tabOpenSaved()){
       loadText('', '');
     }
     if(bookActive()) bookApply(false);
