@@ -184,6 +184,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if path == '/__version':
+            try:
+                st = PAGE_FILE.stat()
+                v = '%d-%d' % (st.st_mtime_ns, st.st_size)
+            except OSError:
+                self.send_error(404)
+                return
+            body = v.encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path == '/__list':
             files = scan_files()
             body = json.dumps({'root': str(ROOT), 'files': files}, ensure_ascii=False).encode('utf-8')

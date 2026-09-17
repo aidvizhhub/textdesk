@@ -268,11 +268,14 @@ try:
         (root / 'wide.py').write_text(('x = "' + 'y' * 500 + '"\n') * 60, encoding='utf-8')
         (root / 'bundle.min.js').write_text('var a=' + '"x",' * 1200 + '"z";\n', encoding='utf-8')
         (root / 'notes.md').write_text('# Заголовок\n\n**жирный** и *курсив* и `код` и [ссылка](https://example.com)\n\n- пункт раз\n- пункт два\n', encoding='utf-8')
+        (root / '11' / 'pic.png').write_bytes(pathlib.Path('/tmp/opencode/px.png').read_bytes())
         (root / '11' / 'canon.md').write_text('''# Заголовок первый
 
 Абзац с **жирным**, *курсивом*, `инлайн-кодом` и [ссылкой](https://example.com/page).
 
 ![схема](pic.png)
+
+![пропажа](missing.png)
 
 ## Список
 
@@ -500,7 +503,8 @@ def hello(name: str) -> str:
                   table: v.querySelectorAll('table tr').length, quote: !!v.querySelector('blockquote'),
                   hr: !!v.querySelector('hr'), fence: v.querySelectorAll('pre code .hljs-keyword').length,
                   linkTarget: link ? link.getAttribute('target') : null,
-                  img: (() => { const i = v.querySelector('img'); return i ? i.getAttribute('src') : null; })(),
+                  imgs: Array.from(v.querySelectorAll('img')).map(i => ({src: i.getAttribute('src'), w: i.naturalWidth})),
+                  miss: (() => { const m = v.querySelector('.imgmiss'); return m ? m.textContent : null; })(),
                   xss: typeof window.__xss, script: !!v.querySelector('script'),
                   jsHref: !!v.querySelector('a[href^="javascript:"]')};
         })()""")
@@ -508,11 +512,24 @@ def hello(name: str) -> str:
               bool(pv['h1']) and pv['h2'] and pv['ul'] >= 3 and pv['nested'] and pv['ol'] == 2
               and pv['table'] >= 2 and pv['quote'] and pv['hr'] and pv['fence'] > 0 and pv['textareaHidden'], str(pv))
         check('просмотр md: внешняя ссылка открывается в новой вкладке', pv['linkTarget'] == '_blank', str(pv['linkTarget']))
-        check('просмотр md: картинка из папки файла ищется рядом с файлом', pv['img'] == '/11/pic.png', str(pv['img']))
+        check('просмотр md: картинка ищется рядом с файлом и грузится',
+              any(i['src'] == '/11/pic.png' and i['w'] > 0 for i in pv['imgs']), str(pv['imgs']))
+        check('просмотр md: пропавшая картинка становится читаемой плашкой, а не битым alt',
+              'missing.png' in (pv['miss'] or '') and 'пропажа' in (pv['miss'] or ''), str(pv['miss']))
         check('просмотр md: сырой html и javascript: не выполняются',
               pv['xss'] == 'undefined' and not pv['script'] and not pv['jsHref'], str(pv))
         page.click('#viewbtn')
         page.wait_for_timeout(200)
+        vv = urllib.request.urlopen(base + '__version').read().decode('utf-8').strip()
+        check('сервер отдаёт версию страницы для проверки устаревания', len(vv) > 5 and '-' in vv, vv)
+        page.route('**/__version', lambda route: route.fulfill(status=200, body='999-999'))
+        page.evaluate("checkVersion()")
+        page.wait_for_timeout(600)
+        st = page.evaluate("""() => ({shown: !document.getElementById('stale').hidden,
+                                      text: document.getElementById('stale').textContent})""")
+        check('новая версия на сервере: страница сама предупреждает и предлагает обновить',
+              st['shown'] and 'обновить' in st['text'], str(st))
+        page.unroute('**/__version')
         back = page.evaluate("""() => ({preview: document.body.classList.contains('preview'),
                                        same: document.getElementById('t').value.includes('Заголовок первый')})""")
         check('просмотр md: возврат к исходнику сохраняет текст', (not back['preview']) and back['same'], str(back))

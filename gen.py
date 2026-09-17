@@ -154,6 +154,9 @@ body.preview .editor::before{display:none}
 #view blockquote{border-left:3px solid var(--line);padding:0 .9em;color:var(--dim)}
 #view a{color:var(--tok-fn)}
 #view img{max-width:100%}
+.imgmiss{display:inline-block;background:color-mix(in srgb, var(--fg) 6%, transparent);border:1px dashed var(--line);border-radius:var(--r1);padding:var(--s1) var(--s2);color:var(--dim);font-size:12.5px}
+#stale{display:flex;align-items:center;gap:var(--s2);padding:var(--s1) var(--s3);background:color-mix(in srgb, var(--acc) 16%, transparent);color:var(--acc);font-size:12.5px}
+#stale button{padding:var(--s1) var(--s2);font-size:12.5px}
 #view hr{border:0;border-top:1px solid var(--line);margin:1.4em 0}
 #view table{border-collapse:collapse}
 #view th,#view td{border:1px solid var(--line);padding:.3em .6em}
@@ -226,6 +229,7 @@ body.book #wrapbtn{display:none}
   </div>
 </div>
 <input id="file" type="file" accept=".txt,.md,.log,.py,.sh,.js,.json,.yml,.yaml,.toml,.ini,.conf,.sql,.html,.css,.c,.h,.cpp,.go,.rs,text/plain" hidden>
+<div id="stale" hidden><span>на сервере новая версия textdesk</span><button id="stalereload">обновить</button></div>
 <main>
   <div class="editor">
     <div id="backw" aria-hidden="true"><div id="back"></div></div>
@@ -514,6 +518,22 @@ document.getElementById('cp').addEventListener('click', async function(){
   }, 900);
 });
 
+const staleBox = document.getElementById('stale');
+document.getElementById('stalereload').addEventListener('click', () => location.reload());
+let srvVersion = null;
+async function checkVersion(){
+  try {
+    const r = await fetch('/__version');
+    if(!r.ok) return;
+    const v = (await r.text()).trim();
+    if(srvVersion === null){ srvVersion = v; return; }
+    if(v !== srvVersion) staleBox.hidden = false;
+  } catch(e){}
+}
+window.addEventListener('focus', checkVersion);
+setInterval(checkVersion, 300000);
+checkVersion();
+
 const saveBtn = document.getElementById('save');
 const savelbl = document.getElementById('savelbl');
 const target = document.getElementById('target');
@@ -575,6 +595,16 @@ function setPreview(on){
       const attr = el.tagName === 'IMG' ? 'src' : 'href';
       const u = el.getAttribute(attr) || '';
       if(u && !/^([a-z][a-z0-9+.-]*:|\/|#)/i.test(u)) el.setAttribute(attr, dir + u);
+    }
+    for(const im of view.querySelectorAll('img')){
+      const miss = () => {
+        const ph = document.createElement('span');
+        ph.className = 'imgmiss';
+        ph.textContent = 'картинки нет: ' + (im.getAttribute('src') || '') + (im.alt ? ' (' + im.alt + ')' : '');
+        if(im.parentNode) im.replaceWith(ph);
+      };
+      if(im.complete && im.naturalWidth === 0) miss();
+      else im.addEventListener('error', miss);
     }
   }
   view.scrollTop = 0;
