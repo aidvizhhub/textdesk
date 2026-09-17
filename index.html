@@ -715,7 +715,13 @@ let pendingFind = null;
 function navClose(){ nav.hidden = true; navFilter = ''; }
 function navFiltered(){
   const f = navFilter.toLowerCase();
-  return navItems.filter(it => it.kind === 'up' || !f || it.name.toLowerCase().indexOf(f) !== -1);
+  const local = navItems.filter(it => it.kind === 'up' || !f || it.name.toLowerCase().indexOf(f) !== -1);
+  if(!f || f.indexOf('/') !== -1 || navAbs || !serverFiles.length) return local;
+  const seen = new Set(navItems.filter(it => it.kind === 'file').map(it => it.rel));
+  const deep = serverFiles.filter(p => p.toLowerCase().indexOf(f) !== -1 && !seen.has(p))
+                          .slice(0, 12)
+                          .map(p => ({kind: 'file', rel: p, name: p}));
+  return local.concat(deep);
 }
 function navCrumbs(){
   navcrumbs.textContent = '';
@@ -1076,7 +1082,8 @@ fileInput.addEventListener('change', async () => {
   loadText(txt, f.name);
   if(!rel){
     target.textContent = !serverMode ? 'без сервера правки писать некуда' :
-      matches.length > 1 ? 'файлов с таким именем несколько — писать некуда' : 'файл вне папки сервера — писать некуда';
+      matches.length > 1 ? 'таких файлов несколько в корне — выбери по имени в «файлах» (Ctrl+P)' : 'файл вне папки сервера — писать некуда';
+    target.title = matches.length > 1 ? matches.join('\n') : target.textContent;
     setTimeout(() => setDirty(dirty), 4000);
   }
 });
