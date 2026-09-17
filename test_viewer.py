@@ -610,6 +610,12 @@ def hello(name: str) -> str:
         page.reload()
         page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 1 && document.querySelector('#tabs .tab.on')")
         check('после перезагрузки вкладки не дублируются: одна и активная — открытый файл', True, '')
+        page.evaluate("() => openServerFile('no-such-file-zzz.md')")
+        page.wait_for_timeout(400)
+        miss = page.evaluate("""() => ({err: typeof loadError === 'undefined' ? '' : loadError,
+                                        on: (document.querySelector('#tabs .tab.on') || {dataset: {}}).dataset.key || null})""")
+        check('битый путь: карточка «не нашёл», подсветка вкладки снята, без падения',
+              'не нашёл' in miss['err'] and miss['on'] is None, str(miss))
         page.evaluate("() => openServerFile('11/deep/canon.md')")
         page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 2")
         page.reload()
@@ -791,13 +797,8 @@ def hello(name: str) -> str:
         lok = page.evaluate("""() => ({names: [...document.querySelectorAll('#tabs .tab .nm')].map(e => e.textContent),
                                       on: (document.querySelector('#tabs .tab.on') || {dataset: {}}).dataset.key,
                                       keys: [...document.querySelectorAll('#tabs .tab')].map(e => e.dataset.key)})""")
-        check('локальная вкладка переживает F5 списком',
-              any(n == 'локальный.md' for n in lok['names']) and len(lok['keys']) >= 2, str(lok))
-        page.click("#tabs .tab[data-key='%s']" % [k for k in lok['keys'] if k.startswith('local:')][0])
-        page.wait_for_timeout(400)
-        stloc = page.evaluate("document.getElementById('target').textContent")
-        check('без клонируемого дескриптора вкладка честно говорит, что файл надо открыть заново',
-              'не вернуть' in stloc, stloc)
+        check('без сохранённого дескриптора мёртвая локальная вкладка после F5 не висит',
+              'локальный.md' not in lok['names'] and lok['on'] is not None, str(lok))
 
         page.evaluate("""() => {
           window.showOpenFilePicker = async () => [{

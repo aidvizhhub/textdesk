@@ -1608,23 +1608,41 @@ function tabPersist(){
 }
 let tabSaved = null;   // снимок до первого tabPersist, иначе ?file= успевает перезаписать список
 try { tabSaved = JSON.parse(sessionStorage.getItem(tabStoreKey) || 'null'); } catch(e){}
-function tabRestore(files){
+async function tabRestore(files){
   const saved = tabSaved;
   tabSaved = null;
   if(!saved || !Array.isArray(saved.list)) return;
   const made = [];
   for(const it of saved.list.slice(-12)){
     if(!it || typeof it.key !== 'string') continue;
-    if(it.key.indexOf('abs:') === 0) made.push({key: it.key, name: it.name, reopen: () => openServerFile(it.key.slice(4))});
-    else if(it.key.indexOf('local:') === 0) made.push({key: it.key, name: it.name, reopen: () => restoreLocalTab(it.key.slice(6), it.name)});
-    else if(it.key.indexOf(':') === -1 && files.indexOf(it.key) !== -1) made.push({key: it.key, name: it.name, reopen: () => openServerFile(it.key)});
+    if(it.key.indexOf('abs:') === 0){
+      made.push({key: it.key, name: it.name, reopen: () => openServerFile(it.key.slice(4))});
+    } else if(it.key.indexOf('local:') === 0){
+      const h = await idbGet('h:' + it.key.slice(6));
+      if(h) made.push({key: it.key, name: it.name, reopen: () => regainHandle(h)});   // без дескриптора вкладка-мертвяк
+    } else if(it.key.indexOf(':') === -1 && files.indexOf(it.key) !== -1){
+      made.push({key: it.key, name: it.name, reopen: () => openServerFile(it.key)});
+    }
   }
   if(!made.length) return;
   const keys = made.map(t => t.key);
   for(let i = tabs.length - 1; i >= 0; i--) if(keys.indexOf(tabs[i].key) !== -1) tabs.splice(i, 1);
   tabs.unshift(...made);            // сохранённый порядок впереди, открытое по ?file= остаётся
   if(tabs.length > 12) tabs.length = 12;
-  if(saved.active && tabs.some(t => t.key === saved.active)) tabActive = saved.active;
+  if(saved.active && tabs.some(t => t.key === saved.active)){
+    tabActive = saved.active;
+  } else if(made.length){
+    // активная вкладка не пережила (например локальный файл без дескриптора) — фокус на ближайшую
+    const idx = saved.list.findIndex(it => it && it.key === saved.active);
+    let pick = '';
+    for(let d = 1; d <= saved.list.length && !pick; d++){
+      for(const j of [idx - d, idx + d]){
+        const it = saved.list[j];
+        if(it && made.some(m => m.key === it.key)){ pick = it.key; break; }
+      }
+    }
+    if(pick) tabActive = pick;
+  }
   tabRender();
 }
 function tabRender(){
@@ -1770,7 +1788,8 @@ function openServerFile(rel){
     }
     loadText('', base);
     setDirty(dirty);
-    tabBlur();
+    tabActive = '';
+    tabRender();
   });
 }
 
@@ -1790,7 +1809,7 @@ async function initServer(){
     rootPath = (data && data.root) || '';
     serverFiles.length = 0;
     serverFiles.push(...files);
-    tabRestore(files);
+    await tabRestore(files);
     if(serverTarget){
       // уже открывается по ?file= или старой памяти
     } else if(fileParam){
