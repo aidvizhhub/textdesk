@@ -15,6 +15,7 @@ import time
 import urllib.request
 
 import json
+import re
 
 from playwright.sync_api import sync_playwright
 
@@ -948,6 +949,28 @@ finally:
     except Exception:
         srv.kill()
     shutil.rmtree(root, ignore_errors=True)
+
+def _lum(h):
+    c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+
+def _cr(a, b):
+    la, lb = _lum(a), _lum(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+html_src = (HERE / 'index.html').read_text(encoding='utf-8')
+for tname, pattern in (('тёмная', r':root\{(.*?)\n\}'), ('светлая', r'html\.light\{(.*?)\n\}')):
+    block = re.search(pattern, html_src, re.S).group(1)
+    vals = dict(re.findall(r'(--[\w-]+):(#[0-9a-fA-F]{6})', block))
+    bg, panel, fg, acc = vals['--bg'], vals['--panel'], vals['--fg'], vals['--acc']
+    worst = min(_cr(vals[k], bg) for k in vals if k.startswith('--tok-') or k in ('--dim', '--acc'))
+    check('палитра %s: текст AAA, приглушённое и токены AA, подпись на акценте AA, без чистого белого и чёрного' % tname,
+          _cr(fg, bg) >= 7 and _cr(fg, panel) >= 7 and worst >= 4.5 and _cr(bg, acc) >= 4.5
+          and bg not in ('#ffffff', '#000000') and fg not in ('#ffffff', '#000000'),
+          'fg %.2f, худший токен %.2f, подпись на акценте %.2f' % (_cr(fg, bg), worst, _cr(bg, acc)))
 
 print('ИТОГ:', 'всё зелёное' if not FAILED else 'упало: ' + ', '.join(FAILED), flush=True)
 sys.exit(1 if FAILED else 0)
