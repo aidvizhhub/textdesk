@@ -265,7 +265,6 @@ const root = document.documentElement;
 const KEY = 'txtviewer';
 let st = {};
 try { st = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e){}
-const tabsFromStore = Array.isArray(st.tabs) ? st.tabs.slice(-12) : [];   // снимок вкладок до первого save(), иначе гонка с ?file= их затрёт
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch(e){} };
 
 function applyTheme(){
@@ -1135,7 +1134,7 @@ async function openAbsFile(abs){
     readonlyPath = abs;
     serverTarget = null;
     loadText(txt, abs.split('/').filter(Boolean).pop());
-    tabBlur();
+    tabOpenAbs(abs);
     target.textContent = 'только чтение: ' + abs;
     navClose();
     return true;
@@ -1270,6 +1269,29 @@ async function handleForget(){
     if(db) db.transaction('kv', 'readwrite').objectStore('kv').delete('lastHandle');
   } catch(e){}
 }
+async function openLocalFile(file){
+  if(!confirmLeave()) return false;
+  serverTarget = null;
+  readonlyPath = null;
+  loadError = '';
+  st.file = '';
+  save();
+  if(isMediaName(file.name)){
+    localHandle = null;
+    const u = URL.createObjectURL(file);
+    showMedia(file.name, u, u);
+    tabOpenLocal(file.name, null, file);
+    setStatus('локальный файл: ' + file.name + ' — просмотр, записать некуда', 5000);
+    return true;
+  }
+  const txt = await file.text();
+  if(!confirmLeave()) return false;
+  localHandle = null;
+  loadText(txt, file.name);
+  tabOpenLocal(file.name, null, file);
+  setStatus('локальный файл: ' + file.name + ' — правки писать некуда', 5000);
+  return true;
+}
 async function openHandle(h){
   const file = await h.getFile();
   if(isMediaName(h.name)){
@@ -1282,7 +1304,7 @@ async function openHandle(h){
     save();
     const u = URL.createObjectURL(file);
     showMedia(h.name, u, u);
-    tabBlur();
+    tabOpenLocal(h.name, h, null);
     setStatus('локальный файл: ' + h.name + ' — просмотр, правки не пишутся', 5000);
     target.title = h.name;
     handleSave(h);
@@ -1298,6 +1320,7 @@ async function openHandle(h){
   st.file = '';
   save();
   loadText(txt, h.name);
+  tabOpenLocal(h.name, h, null);
   setStatus('локальный файл: ' + h.name + ' — Ctrl+S пишет прямо в него');
   target.title = h.name;
   handleSave(h);
@@ -1347,18 +1370,7 @@ fileInput.addEventListener('change', async () => {
   if(!f) return;
   fileInput.value = '';
   if(!confirmLeave()) return;
-  if(isMediaName(f.name)){
-    serverTarget = null;
-    readonlyPath = null;
-    loadError = '';
-    st.file = '';
-    save();
-    const u = URL.createObjectURL(f);
-    showMedia(f.name, u, u);
-    tabBlur();
-    setStatus('локальный файл: ' + f.name + ' — просмотр, записать некуда', 5000);
-    return;
-  }
+  if(isMediaName(f.name)){ await openLocalFile(f); return; }
   await refreshFiles();
   const matches = serverFiles.filter(p => p.split('/').pop() === f.name);
   const txt = await f.text();
@@ -1366,6 +1378,7 @@ fileInput.addEventListener('change', async () => {
   serverTarget = rel;
   if(rel){ readonlyPath = null; st.file = rel; st.navdir = rel.indexOf('/') >= 0 ? rel.replace(/\/[^/]*$/, '') : ''; save(); }
   loadText(txt, f.name);
+  if(rel) tabOpen(rel, f.name); else tabOpenLocal(f.name, null, f);
   if(!rel){
     setStatus(!serverMode ? 'без сервера правки писать некуда' :
       matches.length > 1 ? 'в корне ' + matches.length + ' файлов с таким именем — цель записи не подключена, файл открыт только на чтение'
@@ -1539,9 +1552,9 @@ function tabRender(){
   tabsEl.textContent = '';
   for(const t of tabs){
     const el = document.createElement('div');
-    el.className = 'tab' + (t.rel === tabActive ? ' on' : '');
-    el.dataset.rel = t.rel;
-    el.title = t.rel + ' — клик: открыть, средний клик: закрыть';
+    el.className = 'tab' + (t.key === tabActive ? ' on' : '');
+    el.dataset.key = t.key;
+    el.title = t.key + ' — клик: открыть, средний клик: закрыть';
     const nm = document.createElement('span');
     nm.className = 'nm';
     nm.textContent = t.name;
@@ -1551,68 +1564,56 @@ function tabRender(){
     x.title = 'закрыть';
     el.append(nm, x);
     el.addEventListener('click', e => {
-      if(e.target === x){ tabClose(t.rel); return; }
-      tabActivate(t.rel);
+      if(e.target === x){ tabClose(t.key); return; }
+      tabActivate(t.key);
     });
     el.addEventListener('auxclick', e => {
       if(e.button !== 1) return;
       e.preventDefault();
-      tabClose(t.rel);
+      tabClose(t.key);
     });
     tabsEl.append(el);
   }
 }
-function tabSave(){
-  st.tabs = tabs.map(t => t.rel);
-  st.tab = tabActive;
-  save();
+function tabAdd(key, name, reopen){
+  let t = tabs.find(t => t.key === key);
+  if(!t){ t = {key, name: name || key, reopen}; tabs.push(t); }
+  else t.reopen = reopen;
+  if(tabs.length > 12) tabs.splice(0, tabs.length - 12);
+  tabActive = key;
+  tabRender();
 }
 function tabOpen(rel, name){
-  if(!rel) return;
-  tabRestore(serverFiles.length ? serverFiles : null);   // вкладки прошлой сессии раньше новой
-  const t = tabs.find(t => t.rel === rel);
-  if(!t) tabs.push({rel, name: name || rel.split('/').pop()});
-  if(tabs.length > 12) tabs.splice(0, tabs.length - 12);
-  tabActive = rel;
-  tabSave();
-  tabRender();
+  if(rel) tabAdd(rel, name || rel.split('/').pop(), () => openServerFile(rel));
 }
-function tabBlur(){
-  tabActive = '';
-  tabSave();
-  tabRender();
+function tabOpenLocal(name, handle, file){
+  tabAdd('local:' + name, name, () => { if(handle) openHandle(handle); else openLocalFile(file); });
 }
-function tabRestore(files){
-  if(!tabsFromStore.length) return;
-  for(const rel of tabsFromStore){
-    if((!files || files.indexOf(rel) !== -1) && !tabs.some(t => t.rel === rel)) tabs.push({rel, name: rel.split('/').pop()});
-  }
-  tabsFromStore.length = 0;
-  tabRender();
+function tabOpenAbs(abs){
+  tabAdd('abs:' + abs, abs.split('/').filter(Boolean).pop(), () => openServerFile(abs));
 }
-function tabActivate(rel){
-  if(!rel || rel === tabActive) return;
-  openServerFile(rel);
+function tabActivate(key){
+  const t = tabs.find(t => t.key === key);
+  if(!t || t.key === tabActive) return;
+  t.reopen();
 }
-function tabClose(rel){
-  const i = tabs.findIndex(t => t.rel === rel);
+function tabClose(key){
+  const i = tabs.findIndex(t => t.key === key);
   if(i < 0) return;
-  const wasActive = rel === tabActive;
+  const wasActive = key === tabActive;
   if(wasActive && !confirmLeave()) return;
   tabs.splice(i, 1);
   if(wasActive){
     const next = tabs[Math.max(0, i - 1)];
     tabActive = '';
-    st.file = next ? next.rel : '';
-    tabSave();
-    if(next){ openServerFile(next.rel); return; }
+    st.file = next && next.key.indexOf(':') === -1 ? next.key : '';
+    save();
+    if(next){ next.reopen(); return; }
     serverTarget = null;
     readonlyPath = null;
     loadError = '';
     loadText('', '');
     setDirty(false);
-  } else {
-    tabSave();
   }
   tabRender();
 }
@@ -1692,7 +1693,6 @@ async function initServer(){
     rootPath = (data && data.root) || '';
     serverFiles.length = 0;
     serverFiles.push(...files);
-    tabRestore(files);
     if(serverTarget){
       // уже открывается по ?file= или старой памяти
     } else if(fileParam){

@@ -581,18 +581,18 @@ def hello(name: str) -> str:
         page.click('#view a[data-rel]')
         page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 2")
         tb = page.evaluate("""() => ({n: document.querySelectorAll('#tabs .tab').length,
-                                      rels: [...document.querySelectorAll('#tabs .tab')].map(e => e.dataset.rel),
-                                      on: (document.querySelector('#tabs .tab.on') || {dataset: {}}).dataset.rel})""")
+                                      rels: [...document.querySelectorAll('#tabs .tab')].map(e => e.dataset.key),
+                                      on: (document.querySelector('#tabs .tab.on') || {dataset: {}}).dataset.key})""")
         check('каждая открытая ссылка даёт вкладку, активная подсвечена',
               tb['n'] == 2 and tb['rels'] == ['11/canon.md', '11/deep/canon.md'] and tb['on'] == '11/deep/canon.md', str(tb))
-        page.click("#tabs .tab[data-rel='11/canon.md']")
+        page.click("#tabs .tab[data-key='11/canon.md']")
         page.wait_for_function("location.search === '?file=11/canon.md' && document.getElementById('t').value.startsWith('# Заголовок первый')")
         check('клик по вкладке открывает файл в этой же вкладке браузера',
-              page.evaluate("document.querySelector('#tabs .tab.on').dataset.rel") == '11/canon.md', page.url)
-        page.click("#tabs .tab[data-rel='11/deep/canon.md']", button='middle')
+              page.evaluate("document.querySelector('#tabs .tab.on').dataset.key") == '11/canon.md', page.url)
+        page.click("#tabs .tab[data-key='11/deep/canon.md']", button='middle')
         page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 1")
         check('средний клик закрывает вкладку',
-              page.evaluate("document.querySelector('#tabs .tab.on').dataset.rel") == '11/canon.md', '')
+              page.evaluate("document.querySelector('#tabs .tab.on').dataset.key") == '11/canon.md', '')
         page.goto(base + '?file=11/canon.md')
         page.wait_for_function("document.getElementById('t').value.startsWith('# Заголовок первый')")
         page.click('#viewbtn')
@@ -609,7 +609,7 @@ def hello(name: str) -> str:
               pv2['pad'] >= 16 and 0 < pv2['w'] <= 1010 and pv2['x'] >= 16, str(pv2))
         page.reload()
         page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 1 && document.querySelector('#tabs .tab.on')")
-        check('вкладки переживают перезагрузку', True, '')
+        check('после перезагрузки вкладки не дублируются: одна и активная — открытый файл', True, '')
         page.click('#viewbtn')
         page.wait_for_function("document.body.classList.contains('preview')")
         page.click('#viewbtn')
@@ -648,6 +648,33 @@ def hello(name: str) -> str:
         check('Ctrl+Enter в поле пути открывает файл в новой вкладке',
               len(popups) == 1 and '?file=11/canon.md' in popups[0].url, str([pp.url for pp in popups]))
         if popups: popups[0].close()
+        page.keyboard.press('Escape')
+        page.wait_for_timeout(150)
+        page.goto(base + '?file=tool.py')
+        page.wait_for_function("document.getElementById('t').value.startsWith('import os')")
+        popups.clear()
+        page.click('#navbtn')
+        page.wait_for_function("!document.getElementById('nav').hidden && document.querySelectorAll('#navlist .navitem').length > 3")
+        check('кнопка «файлы» открывает панель в текущей странице, без новых браузерных вкладок',
+              not popups and '?file=tool.py' in page.url, str([pp.url for pp in popups]) + ' | ' + page.url)
+        page.fill('#pathin', 'canon')
+        page.wait_for_function("document.querySelectorAll('#navlist .navitem').length === 2")
+        page.evaluate("() => [...document.querySelectorAll('#navlist .navitem')].find(r => r.textContent.includes('11/canon.md')).click()")
+        page.wait_for_timeout(1200)
+        print('NAVDBG3', page.evaluate("""() => ({url: location.search,
+            tabs: [...document.querySelectorAll('#tabs .tab')].map(e => e.dataset.key),
+            navHidden: document.getElementById('nav').hidden,
+            val: document.getElementById('t').value.slice(0, 20)})"""), flush=True)
+        page.wait_for_function("document.querySelectorAll('#tabs .tab').length === 2 && location.search === '?file=11/canon.md'")
+        tb2 = page.evaluate("() => [...document.querySelectorAll('#tabs .tab')].map(e => e.dataset.key)")
+        check('файл из панели добавляет внутреннюю вкладку здесь же, без дублей',
+              tb2 == ['11/canon.md', 'tool.py'] or tb2 == ['tool.py', '11/canon.md'], str(tb2))
+        page.goto(base + '?file=tool.py')
+        page.wait_for_function("document.getElementById('t').value.startsWith('import os')")
+        popups.clear()
+        page.click('#open')
+        page.wait_for_timeout(600)
+        check('кнопка «открыть файл…» не плодит браузерные вкладки', not popups, str([pp.url for pp in popups]))
         page.keyboard.press('Escape')
         page.wait_for_timeout(150)
         page.goto(base + '?file=rootpic.md')
@@ -711,6 +738,14 @@ def hello(name: str) -> str:
         mem = page.evaluate("localStorage.getItem('txtviewer') || '{}'")
         check('локальный файл из системного пикера открывается и помечен как локальный',
               'локальный файл' in loc and 'локальный.md' in loc, loc)
+        ltab = page.evaluate("() => (document.querySelector('#tabs .tab.on') || {dataset: {}}).dataset.key")
+        check('локальный файл сходу получает внутреннюю вкладку', ltab == 'local:локальный.md', str(ltab))
+        page.evaluate("() => openServerFile('11/canon.md')")
+        page.wait_for_function("document.getElementById('t').value.startsWith('# Заголовок первый')")
+        page.click("#tabs .tab[data-key='local:локальный.md']")
+        page.wait_for_function("document.getElementById('t').value === '# локальный файл\\n'")
+        check('клик по вкладке локального файла возвращает его по дескриптору',
+              page.evaluate("() => (document.querySelector('#tabs .tab.on') || {dataset: {}}).dataset.key") == 'local:локальный.md', '')
         check('локальный документ не оставляет в памяти серверный путь', '"file":""' in mem, mem)
         page.fill('#t', '# правка локального\n')
         page.keyboard.press('Control+s')
