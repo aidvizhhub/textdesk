@@ -558,6 +558,22 @@ def hello(name: str) -> str:
         check('просмотр md: возврат к исходнику сохраняет текст', (not back['preview']) and back['same'], str(back))
         page.click('#viewbtn')
         page.wait_for_function("document.body.classList.contains('preview')")
+        page.click('#wrapbtn')
+        page.wait_for_timeout(400)
+        page.click('#viewbtn')
+        page.wait_for_function("!document.body.classList.contains('preview')")
+        page.wait_for_timeout(700)
+        pw = page.evaluate("""() => { const b = document.getElementById('back'), t = document.getElementById('t');
+          const lh = parseFloat(getComputedStyle(t).lineHeight) || 20;
+          return {backW: b.offsetWidth, lines: b.children.length,
+                  firstRows: b.children.length ? Math.round(b.children[0].offsetHeight / lh * 10) / 10 : 0,
+                  spans: b.querySelectorAll('span').length}; }""")
+        check('перенос, нажатый внутри просмотра, не ломает холст после возврата в текст',
+              pw['backW'] > 100 and pw['lines'] > 0 and pw['firstRows'] <= 3 and pw['spans'] > 0, str(pw))
+        page.click('#wrapbtn')
+        page.wait_for_timeout(300)
+        page.click('#viewbtn')
+        page.wait_for_function("document.body.classList.contains('preview')")
         page.click('#bookbtn')
         page.wait_for_timeout(300)
         st2 = page.evaluate("""() => ({book: document.body.classList.contains('book'), preview: document.body.classList.contains('preview'),

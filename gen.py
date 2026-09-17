@@ -309,7 +309,9 @@ function syncScroll(){
   root.style.setProperty('--sy', (-area.scrollTop) + 'px');
   root.style.setProperty('--sx', (-area.scrollLeft) + 'px');
 }
+let backStale = false;
 function buildBack(){
+  if(document.body.classList.contains('preview')){ backStale = true; return; }   // холст скрыт, ширина textarea = 0
   const lines = area.value.split('\n');
   const digits = Math.max(3, String(lines.length).length + 1);
   const gut = 'calc(' + digits + 'ch + 1.7rem)';
@@ -324,7 +326,8 @@ function buildBack(){
   }
   back.textContent = '';
   back.append(frag);
-  back.style.width = (document.body.classList.contains('nowrap') ? area.scrollWidth : area.clientWidth) + 'px';
+  const wpx = document.body.classList.contains('nowrap') ? area.scrollWidth : area.clientWidth;
+  if(wpx > 0) back.style.width = wpx + 'px';
   syncScroll();
   upd();
   highlightView();
@@ -585,7 +588,10 @@ const view = document.getElementById('view');
 function setPreview(on){
   const can = !!on && !!MD && isMdName(curName) && !bookActive();
   document.body.classList.toggle('preview', can);
-  if(!can) view.textContent = '';
+  if(!can){
+    view.textContent = '';
+    if(backStale){ backStale = false; scheduleBack(); }
+  }
   viewbtn.classList.toggle('on', can);
   viewbtn.setAttribute('aria-pressed', can ? 'true' : 'false');
   viewbtn.textContent = can ? 'текст' : 'просмотр';
