@@ -16,6 +16,18 @@ import tempfile
 import urllib.parse
 import webbrowser
 
+if sys.platform == 'win32':
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+    except Exception:
+        pass
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+
 HERE = pathlib.Path(__file__).resolve().parent
 PAGE_FILE = HERE / 'index.html'
 VENDORED = ('/hljs.min.js', '/mdit.min.js')
