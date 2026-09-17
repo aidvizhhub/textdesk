@@ -149,6 +149,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return
             needle = q if cs else q.lower()
             files_out, hits_total, truncated = [], 0, False
+            scanned = 0
             for rel in scan_files():
                 p = ROOT / rel
                 try:
@@ -157,6 +158,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     data = p.read_text(encoding='utf-8')
                 except (OSError, UnicodeDecodeError):
                     continue
+                scanned += 1
                 found = []
                 for i, line in enumerate(data.split('\n'), 1):
                     hay = line if cs else line.lower()
@@ -175,7 +177,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     truncated = True
                     break
             body = json.dumps({'q': q, 'case': cs, 'files': files_out, 'files_total': len(files_out),
-                               'hits_total': hits_total, 'truncated': truncated}, ensure_ascii=False).encode('utf-8')
+                               'hits_total': hits_total, 'truncated': truncated, 'scanned': scanned}, ensure_ascii=False).encode('utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Content-Length', str(len(body)))

@@ -89,7 +89,8 @@ body,.bar,.stat,button{transition:background-color .18s,color .18s,border-color 
 .navitem{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--fg)}
 .navitem.sel{background:var(--btn);outline:1px solid var(--acc);outline-offset:-1px}
 .navitem .dirc{color:var(--acc);min-width:14px;text-align:center}
-.navempty{padding:11px;color:var(--dim);font-size:12.5px}
+.navempty{padding:var(--s3);color:var(--dim);font-size:12.5px}
+.navempty2{margin-top:var(--s1);font-size:12px;color:var(--dim);opacity:.85}
 textarea::selection{background:var(--sel)}
 .hljs-keyword,.hljs-selector-tag,.hljs-literal{color:var(--tok-kw)}
 .hljs-string,.hljs-regexp,.hljs-template-tag{color:var(--tok-str)}
@@ -704,13 +705,27 @@ function renderNav(){
   const items = navFiltered();
   if(navSel >= items.length) navSel = items.length ? items.length - 1 : 0;
   navlist.textContent = '';
-  if(!items.length){
+  const real = items.filter(it => it.kind !== 'up');
+  if(!real.length){
     const d = document.createElement('div');
     d.className = 'navempty';
-    d.textContent = navFilter ? 'ничего не найдено' : 'пусто';
+    const sub = document.createElement('div');
+    sub.className = 'navempty2';
+    if(navGrep){
+      d.textContent = 'по «' + navGrep.q + '» ничего нет';
+      sub.textContent = 'просмотрел ' + ((navGrep.data && navGrep.data.scanned) || 0) + ' файлов. другое слово или Esc — назад к дереву';
+    } else if(navFilter){
+      d.textContent = 'по имени «' + navFilter + '» ничего нет';
+      sub.textContent = 'Enter — открыть это как путь, Esc — сбросить фильтр';
+    } else {
+      d.textContent = 'папка пуста';
+      sub.textContent = navAbs ? 'снаружи корня только чтение, Backspace — на уровень выше'
+                               : 'файлы видны сразу, список перечитывается при каждом открытии; Backspace — на уровень выше';
+    }
+    d.append(sub);
     navlist.append(d);
-    return;
   }
+  if(!items.length) return;
   items.forEach((it, i) => {
     const row = document.createElement('div');
     row.className = 'navitem' + (i === navSel ? ' sel' : '');
@@ -800,7 +815,17 @@ pathin.addEventListener('keydown', e => {
     e.preventDefault();
     const v = pathin.value.trim();
     if(v.indexOf('/') !== -1 || /^~/.test(v)){ pathResolve(v); return; }
-    if(v){ navActivate(navSel); return; }
+    const items = navFiltered();
+    if(navFilter){
+      const realIdx = items.findIndex(it => it.kind !== 'up');
+      if(realIdx >= 0){
+        navActivate(items[navSel] && items[navSel].kind !== 'up' ? navSel : realIdx);
+        return;
+      }
+      if(v){ pathResolve(v); return; }
+    }
+    if(items.length){ navActivate(navSel); return; }
+    if(v){ pathResolve(v); return; }
     navNote('введи имя файла, папки или путь');
   } else if(e.key === 'Escape'){
     e.preventDefault();

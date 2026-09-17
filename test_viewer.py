@@ -778,6 +778,51 @@ def hello(name: str) -> str:
         page.wait_for_timeout(300)
         check('обзор: Enter открыл файл из фильтра', page.evaluate('location.search') == '?file=notes.md',
               repr(page.evaluate('location.search')))
+        (root / 'empty dir').mkdir(exist_ok=True)
+        page.keyboard.press('Control+p')
+        page.wait_for_selector('#nav:not([hidden])')
+        page.wait_for_timeout(400)
+        page.fill('#pathin', str(root) + '/empty dir')
+        page.press('#pathin', 'Enter')
+        page.wait_for_function("document.querySelector('#navcrumbs').textContent.includes('empty dir')")
+        page.wait_for_timeout(400)
+        es = page.evaluate("""() => { const d = document.querySelector('#navlist .navempty');
+          return {main: d ? d.firstChild.textContent : null, hint: d ? d.querySelector('.navempty2').textContent : null}; }""")
+        check('пустая папка: внятный empty state с подсказкой',
+              es['main'] == 'папка пуста' and 'Backspace' in (es['hint'] or ''), str(es))
+        page.fill('#pathin', 'zzz-no-such')
+        page.wait_for_timeout(300)
+        nf = page.evaluate("""() => { const d = document.querySelector('#navlist .navempty');
+          return {main: d ? d.firstChild.textContent : null, hint: d ? d.querySelector('.navempty2').textContent : null}; }""")
+        check('фильтр без совпадений: подсказка про путь и Esc',
+              'zzz-no-such' in (nf['main'] or '') and 'Enter' in (nf['hint'] or ''), str(nf))
+        page.press('#pathin', 'Enter')
+        try:
+            page.wait_for_function("document.getElementById('pathin').placeholder.includes('не нашёл')"
+                                   " || document.getElementById('target').textContent.includes('не нашёл')", timeout=6000)
+            seen = True
+        except Exception:
+            seen = False
+        check('Enter по имени без совпадений пробует открыть его как путь',
+              seen, page.eval_on_selector('#pathin', 'el => el.placeholder') + ' | ' + page.eval_on_selector('#target', 'el => el.textContent'))
+        page.keyboard.press('Control+Shift+F')
+        page.fill('#navgrep', 'неттакогослованигде')
+        page.press('#navgrep', 'Enter')
+        page.wait_for_function("document.querySelector('#navlist .navempty') !== null")
+        page.wait_for_timeout(300)
+        gs = page.evaluate("""() => { const d = document.querySelector('#navlist .navempty');
+          return {main: d.firstChild.textContent, hint: d.querySelector('.navempty2').textContent}; }""")
+        check('поиск по корню без совпадений: сколько просканировал и что дальше',
+              'ничего нет' in gs['main'] and 'просмотрел' in gs['hint'] and 'Esc' in gs['hint'], str(gs))
+        page.keyboard.press('Escape')
+        page.wait_for_function("document.getElementById('nav').hidden")
+        page.keyboard.press('Control+p')
+        page.wait_for_selector('#nav:not([hidden])')
+        page.wait_for_timeout(300)
+        page.click('#navcrumbs button')
+        page.wait_for_timeout(400)
+        page.keyboard.press('Escape')
+        page.wait_for_function("document.getElementById('nav').hidden")
         page.keyboard.press('Control+p')
         page.wait_for_selector('#nav:not([hidden])')
         page.wait_for_timeout(400)
